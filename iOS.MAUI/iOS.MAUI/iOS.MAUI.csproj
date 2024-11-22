@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-ios</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>true</ImplicitUsings>
+    <IsBindingProject>true</IsBindingProject>
+
+    <!--
+      Enable trim analyzers for class libraries.
+      To learn more, see: https://learn.microsoft.com/dotnet/core/deploying/trimming/prepare-libraries-for-trimming
+    -->
+    <IsTrimmable>true</IsTrimmable>
+    <SupportedOSPlatformVersion>11.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <MtouchLink>SdkOnly</MtouchLink>
+    <MtouchNoSymbolStrip>True</MtouchNoSymbolStrip>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <MtouchLink>SdkOnly</MtouchLink>
+    <MtouchUseLlvm>True</MtouchUseLlvm>
+    <MtouchNoSymbolStrip>True</MtouchNoSymbolStrip>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ObjcBindingApiDefinition Include="ApiDefinition.cs" />
+    <ObjcBindingCoreSource Include="StructsAndEnums.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <NativeReference Include="Approov.xcframework">
+      <Kind>Framework</Kind>
+      <Frameworks>Foundation</Frameworks>
+      <LinkerFlags>-ObjC</LinkerFlags>
+      <WeakFrameworks></WeakFrameworks>
+      <ForceLoad>True</ForceLoad>
+      <NeedsGccExceptionHandling>False</NeedsGccExceptionHandling>
+      <IsCxx>False</IsCxx>
+      <SmartLink>True</SmartLink>
+      <ExtraArgs>--registrar:static</ExtraArgs>
+    </NativeReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="ApiDefinition.cs">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="StructsAndEnums.cs">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Approov.xcframework/**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
