@@ -207,15 +207,14 @@ namespace Approov
             var approovResult = FetchApproovTokenAndWait(urlWithBaseAddress);
 
             // Log result
-            if (approovResult != null)
+            if (approovResult == null)
             {
-                Console.WriteLine(TAG + "Approov token for " + urlWithBaseAddress + " : " + approovResult.LoggableToken);
                 // We throw at this point since we need to handle the result and we can not continue: the JNI call has failed
                 throw new PermanentException(TAG + "Approov JNI call failed during FetchApproovTokenAndWait(" + urlWithBaseAddress +")");
             }
             else
             {
-                Console.WriteLine(TAG + "Approov token for " + urlWithBaseAddress + " : null");
+                Console.WriteLine(TAG + "Approov token for " + urlWithBaseAddress + " : " + approovResult.LoggableToken);
             }
 
             // Check the status of the Approov token fetch
