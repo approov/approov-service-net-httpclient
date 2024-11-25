@@ -1,9 +1,16 @@
 ﻿<metadata>
-  <!--
-  This sample removes the class: android.support.v4.content.AsyncTaskLoader.LoadTask:
-  <remove-node path="/api/package[@name='android.support.v4.content']/class[@name='AsyncTaskLoader.LoadTask']" />
-  
-  This sample removes the method: android.support.v4.content.CursorLoader.loadInBackground:
-  <remove-node path="/api/package[@name='android.support.v4.content']/class[@name='CursorLoader']/method[@name='loadInBackground']" />
-  -->
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='SUCCESS']" name="managedName">Success</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='NO_NETWORK']" name="managedName">NoNetwork</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='MITM_DETECTED']" name="managedName">MitmDetected</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='POOR_NETWORK']" name="managedName">PoorNetwork</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='NO_APPROOV_SERVICE']" name="managedName">NoApproovService</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='BAD_URL']" name="managedName">BadUrl</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='UNKNOWN_URL']" name="managedName">UnknownUrl</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='UNPROTECTED_URL']" name="managedName">UnprotectedUrl</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='NO_NETWORK_PERMISSION']" name="managedName">NoNetworkPermission</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='MISSING_LIB_DEPENDENCY']" name="managedName">MissingLibDependency</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='INTERNAL_ERROR']" name="managedName">InternalError</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='REJECTED']" name="managedName">Rejected</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='DISABLED']" name="managedName">Disabled</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk']/class[@name='Approov.TokenFetchStatus']/field[@name='UNKNOWN_KEY']" name="managedName">UnknownKey</attr>
 </metadata>

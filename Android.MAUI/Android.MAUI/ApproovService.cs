@@ -209,6 +209,7 @@ namespace Approov
             // Log result
             if (approovResult == null)
             {
+                Console.WriteLine(TAG + "Approov token for " + urlWithBaseAddress + " : " + "null");
                 // We throw at this point since we need to handle the result and we can not continue: the JNI call has failed
                 throw new PermanentException(TAG + "Approov JNI call failed during FetchApproovTokenAndWait(" + urlWithBaseAddress +")");
             }
