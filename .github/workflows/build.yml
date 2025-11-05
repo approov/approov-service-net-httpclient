@@ -1,0 +1,40 @@
+name: CI-build
+
+on:
+  push:
+    branches:
+      - '*'
+  pull_request:
+   branches:
+      - '*'
+  workflow_dispatch: # Run on demand.
+
+env:
+  # Stop wasting time caching packages
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  # Disable sending usage data to Microsoft
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+jobs:
+  build:
+
+    runs-on: macos-15
+    timeout-minutes: 10
+
+    if: ${{ github.triggering_actor != 'dependabot[bot]' }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10
+    - name: Install MAUI Workloads
+      run: dotnet workload install maui
+    - name: Build Android
+      run: |
+        dotnet restore Android.MAUI/Android.MAUI.sln
+        dotnet build Android.MAUI/Android.MAUI.sln --configuration Release --no-restore
+    - name: Build iOS
+      run: |
+        dotnet restore iOS.MAUI/iOS.MAUI.sln
+        dotnet build iOS.MAUI/iOS.MAUI.sln --configuration Release --no-restore
