@@ -63,7 +63,7 @@ namespace Approov
                     {
                         throw new InitializationFailureException(TAG + "Initialization failed: " + e.Message);
                     }
-                    SetUserProperty("approov-service-xamarin");
+                    SetUserProperty("approov-service-maui");
                 }
             }
         }
@@ -218,8 +218,27 @@ namespace Approov
                 Console.WriteLine(TAG + "Approov token for " + urlWithBaseAddress + " : " + approovResult.LoggableToken);
             }
 
-            // Check the status of the Approov token fetch
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
+            // Fallback: if approovResult.Status is a string, try to convert it to TokenFetchStatus
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
+            if (approovResult.Status is string statusString)
+            {
+                // Try to parse the string to the enum, ignoring case
+                if (Enum.TryParse(typeof(TokenFetchStatus), statusString, true, out var parsedStatus))
+                {
+                    approovResult.Status = (TokenFetchStatus)parsedStatus;
+                }
+            }
+
+            // Fallback: if approovResult.Status is a string, try to convert it to TokenFetchStatus
+            if (approovResult.Status is string statusString1)
+            {
+                if (Enum.TryParse(typeof(TokenFetchStatus), statusString1, true, out var parsedStatus1))
+                {
+                    approovResult.Status = (TokenFetchStatus)parsedStatus1;
+                }
+            }
             if (approovResult.Status == TokenFetchStatus.Success)
             {
                 // we successfully obtained a token so add it to the header for the HttpClient or HttpRequestMessage
@@ -450,6 +469,14 @@ namespace Approov
 #pragma warning disable CS8602 // Dereference of a possibly null reference.
             Console.WriteLine(TAG + "FetchSecureString: " + type + " " + approovResults.Status.ToString());
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
+            // Fallback: if approovResults.Status is a string, try to convert it to TokenFetchStatus
+            if (approovResults.Status is string statusString2)
+            {
+                if (Enum.TryParse(typeof(TokenFetchStatus), statusString2, true, out var parsedStatus2))
+                {
+                    approovResults.Status = (TokenFetchStatus)parsedStatus2;
+                }
+            }
             if (approovResults.Status == TokenFetchStatus.Disabled)
             {
                 throw new ConfigurationFailureException(TAG + "FetchSecureString:  secure message string feature is disabled");
@@ -528,6 +555,14 @@ namespace Approov
                 throw new PermanentException(TAG + "FetchCustomJWT: malformed JSON " + e.Message);
             }
 
+            // Fallback: if approovResult.Status is a string, try to convert it to TokenFetchStatus
+            if (approovResult.Status is string statusString3)
+            {
+                if (Enum.TryParse(typeof(TokenFetchStatus), statusString3, true, out var parsedStatus3))
+                {
+                    approovResult.Status = (TokenFetchStatus)parsedStatus3;
+                }
+            }
             if (approovResult.Status == TokenFetchStatus.Disabled)
             {
                 throw new ConfigurationFailureException(TAG + "FetchCustomJWT: feature not enabled");
@@ -582,6 +617,14 @@ namespace Approov
                 throw new PermanentException(TAG + "Precheck approovResult: JNI call failed");
             }
             // Process the result
+            // Fallback: if approovResult.Status is a string, try to convert it to TokenFetchStatus
+            if (approovResult.Status is string statusString4)
+            {
+                if (Enum.TryParse(typeof(TokenFetchStatus), statusString4, true, out var parsedStatus4))
+                {
+                    approovResult.Status = (TokenFetchStatus)parsedStatus4;
+                }
+            }
             if (approovResult.Status == TokenFetchStatus.Rejected)
             {
                 string localARC = approovResult.ARC ?? string.Empty;
