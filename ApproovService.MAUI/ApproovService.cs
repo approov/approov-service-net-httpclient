@@ -44,7 +44,9 @@ public static partial class ApproovService
     private static ManualResetEventSlim? _failureCacheMissGroup = null;
 
     // Partial method declarations (resolved by Platforms/Android or Platforms/iOS)
-    private static partial void PlatformInitializeSdk(string config, string comment);
+    // Returns true if newly initialized, false if the platform SDK reports it is
+    // already initialized (treated as success); throws on real failure
+    private static partial bool PlatformInitializeSdk(string config, string? comment);
     private static partial void PlatformSetUserProperty(string property);
     private static partial IApproovTokenFetchResult PlatformFetchApproovTokenAndWait(string url);
     private static partial IApproovTokenFetchResult PlatformFetchSecureStringAndWait(string key, string? newDef);
@@ -75,23 +77,14 @@ public static partial class ApproovService
     {
         lock (_initLock)
         {
-            if (_sdkInitialized)
-            {
-                if (_configUsed == config)
-                {
-                    // Allow reinit comments to reach the native SDK
-                    if (comment != null && comment.StartsWith("reinit"))
-                        PlatformInitializeSdk(config, comment);
-                    return;
-                }
-                if (!_isBypassMode)
-                    throw new InitializationFailureException(
-                        "ApproovService already initialized with a different configuration");
-                // Fall through: bypass-mode upgrade to real config
-            }
-
             if (string.IsNullOrEmpty(config))
             {
+                if (_sdkInitialized)
+                {
+                    Log(ApproovLogLevel.Info,
+                        "Initialize with empty configuration ignored: already initialized");
+                    return;
+                }
                 _configUsed = config;
                 _isBypassMode = true;
                 _sdkInitialized = true;
@@ -99,26 +92,28 @@ public static partial class ApproovService
                 return;
             }
 
-            // Preserve existing state so it can be restored if the platform call fails
-            string? prevConfig = _configUsed;
-            bool prevBypass = _isBypassMode;
-            bool prevInit = _sdkInitialized;
+            // Non-empty configs are always forwarded to the platform SDK; a throw
+            // propagates before any service-layer state is modified
+            bool newlyInitialized = PlatformInitializeSdk(config, comment);
+            if (!newlyInitialized)
+                Log(ApproovLogLevel.Info,
+                    "Platform SDK reports already initialized: treated as success");
+            PlatformSetUserProperty("approov-service-maui/3.5.11");
+
+            // Platform success: reset and re-commit service-layer state
+            lock (_stateLock)
+            {
+                _approovTokenHeader = "Approov-Token"; _approovTokenPrefix = "";
+                _approovTraceIDHeader = null; _bindingHeader = null;
+                _useApproovStatusIfNoToken = false; _bodyDigestEnabled = true;
+                _serviceMutator = ApproovServiceMutatorDefault.Shared;
+                _substitutionHeaders = new(); _substitutionQueryParams = new();
+                _exclusionURLRegexs = new();
+            }
             _configUsed = config;
             _isBypassMode = false;
-            try
-            {
-                PlatformInitializeSdk(config, comment ?? "");
-                PlatformSetUserProperty("approov-service-maui/3.5.11");
-                _sdkInitialized = true;
-                Log(ApproovLogLevel.Info, "ApproovService initialized");
-            }
-            catch
-            {
-                _configUsed = prevConfig;
-                _isBypassMode = prevBypass;
-                _sdkInitialized = prevInit;
-                throw;
-            }
+            _sdkInitialized = true;
+            Log(ApproovLogLevel.Info, "ApproovService initialized");
         }
     }
 

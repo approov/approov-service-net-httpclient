@@ -6,7 +6,13 @@ namespace Approov.Tests;
 [Collection("ApproovService")]
 public class ApproovServiceInitTests : IDisposable
 {
-    public void Dispose() => ApproovService.ResetForTesting();
+    public void Dispose()
+    {
+        ApproovService.InitCallCount = 0;
+        ApproovService.NextInitShouldThrow = false;
+        ApproovService.NextInitReturnsFalse = false;
+        ApproovService.ResetForTesting();
+    }
 
     [Fact]
     public void Initialize_EmptyConfig_SetsBypassMode()
@@ -23,11 +29,13 @@ public class ApproovServiceInitTests : IDisposable
     }
 
     [Fact]
-    public void Initialize_DifferentConfigTwice_Throws()
+    public void Initialize_DifferentConfigTwice_ForwardsAndSurfacesPlatformRejection()
     {
         ApproovService.Initialize("config-a");
-        Assert.Throws<InitializationFailureException>(() =>
+        ApproovService.NextInitShouldThrow = true;
+        Assert.Throws<Exception>(() =>
             ApproovService.Initialize("config-b"));
+        Assert.True(ApproovService.IsApproovEnabled());
     }
 
     [Fact]

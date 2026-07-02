@@ -7,16 +7,23 @@ namespace Approov;
 
 public static partial class ApproovService
 {
-    private static partial void PlatformInitializeSdk(string config, string comment)
+    private static partial bool PlatformInitializeSdk(string config, string? comment)
     {
         var context = Android.App.Application.Context;
         string? initial = config; string? update = null;
         int ci = config.IndexOf(':');
         if (ci >= 0) { initial = config[..ci]; update = config[(ci + 1)..]; }
-        bool ok = global::Com.Criticalblue.Approovsdk.Approov.Initialize(
-            context, initial, update, comment);
-        if (!ok)
-            throw new InitializationFailureException("Approov SDK initialization failed");
+        try
+        {
+            // false means the SDK is already initialized, which is not a failure
+            return global::Com.Criticalblue.Approovsdk.Approov.Initialize(
+                context, initial, update, comment);
+        }
+        catch (Java.Lang.Exception ex)
+        {
+            throw new InitializationFailureException(
+                $"Approov SDK initialization failed: {ex.Message}");
+        }
     }
 
     private static partial void PlatformSetUserProperty(string property)

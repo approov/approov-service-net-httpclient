@@ -13,6 +13,9 @@ public static partial class ApproovService
     // New: SDK init tracking
     internal static int InitCallCount = 0;
     internal static bool NextInitShouldThrow = false;
+    internal static bool NextInitReturnsFalse = false;
+    internal static string? LastInitComment = null;
+    internal static bool LastInitCommentWasNull = false;
 
     // New: user-property tracking (for telemetry tests)
     internal static string? LastUserProperty = null;
@@ -24,14 +27,22 @@ public static partial class ApproovService
     // New: secure-string result override (for substitution edge-case tests)
     internal static StubTokenFetchResult? NextSecureStringResult = null;
 
-    private static partial void PlatformInitializeSdk(string config, string comment)
+    private static partial bool PlatformInitializeSdk(string config, string? comment)
     {
         InitCallCount++;
+        LastInitComment = comment;
+        LastInitCommentWasNull = comment == null;
         if (NextInitShouldThrow)
         {
             NextInitShouldThrow = false;
             throw new Exception("Stub: PlatformInitializeSdk forced failure");
         }
+        if (NextInitReturnsFalse)
+        {
+            NextInitReturnsFalse = false;
+            return false;
+        }
+        return true;
     }
 
     private static partial void PlatformSetUserProperty(string property)

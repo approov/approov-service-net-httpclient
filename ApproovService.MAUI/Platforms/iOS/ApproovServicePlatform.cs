@@ -7,15 +7,17 @@ using ApproovNative = global::ApproovSDK.Approov;
 
 public static partial class ApproovService
 {
-    private static partial void PlatformInitializeSdk(string config, string comment)
+    private static partial bool PlatformInitializeSdk(string config, string? comment)
     {
         string? initial = config; string? update = null;
         int ci = config.IndexOf(':');
         if (ci >= 0) { initial = config[..ci]; update = config[(ci + 1)..]; }
         bool ok = ApproovNative.Initialize(initial, update, comment, out var err);
-        if (!ok || err != null)
+        if (err != null)
             throw new InitializationFailureException(
-                $"Approov SDK init error: {err?.LocalizedDescription ?? "unknown"}");
+                $"Approov SDK init error: {err.LocalizedDescription}");
+        // ok == false with no error means the SDK is already initialized
+        return ok;
     }
 
     private static partial void PlatformSetUserProperty(string property)
