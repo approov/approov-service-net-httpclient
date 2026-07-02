@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-ios</TargetFramework>
+    <RootNamespace>ApproovSDK</RootNamespace>
+    <AssemblyName>Approov.iOS.Binding</AssemblyName>
+    <IsBindingProject>true</IsBindingProject>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ObjcBindingApiDefinition Include="ApiDefinition.cs" />
+    <ObjcBindingCoreSource Include="StructsAndEnums.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <NativeReference Include="libs/Approov.xcframework">
+      <Kind>Framework</Kind>
+      <Frameworks>Foundation</Frameworks>
+      <LinkerFlags>-ObjC</LinkerFlags>
+      <ForceLoad>True</ForceLoad>
+      <NeedsGccExceptionHandling>False</NeedsGccExceptionHandling>
+      <IsCxx>False</IsCxx>
+      <SmartLink>True</SmartLink>
+      <ExtraArgs>--registrar:static</ExtraArgs>
+    </NativeReference>
+  </ItemGroup>
+</Project>
