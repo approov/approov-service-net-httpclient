@@ -70,6 +70,14 @@ public class ApproovServiceInitTests : IDisposable
         Assert.Same(custom, ApproovService.GetServiceMutator());
     }
 
+    [Fact]
+    public void SetServiceMutator_Null_RestoresDefaultMutator()
+    {
+        ApproovService.SetServiceMutator(new NoOpMutator());
+        ApproovService.SetServiceMutator(null);
+        Assert.Same(ApproovServiceMutatorDefault.Shared, ApproovService.GetServiceMutator());
+    }
+
     private sealed class NoOpMutator : IApproovServiceMutator
     {
         public void HandlePrecheckResult(IApproovTokenFetchResult r) { }

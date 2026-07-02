@@ -61,4 +61,43 @@ public class ApproovServiceUpdateRequestTests : IDisposable
         var response = ApproovService.UpdateRequestWithApproov(req);
         Assert.Equal(ApproovFetchDecision.ShouldRetry, response.Decision);
     }
+
+    [Fact]
+    public void UpdateRequest_AfterSetServiceMutatorNull_UsesDefaultFailClosedBehavior()
+    {
+        ApproovService.Initialize("dummy-config");
+
+        // Custom fail-open mutator: a Rejected token result proceeds without a token
+        ApproovService.SetServiceMutator(new FailOpenMutator());
+        ApproovService.NextFetchResult = new StubTokenFetchResult
+            { Status = ApproovTokenFetchStatus.Rejected, Token = "", ARC = "ARC1", RejectionReasons = "r1" };
+        var req1 = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
+        var response1 = ApproovService.UpdateRequestWithApproov(req1);
+        Assert.Equal(ApproovFetchDecision.ShouldProceed, response1.Decision);
+
+        // Null restores the default mutator: the same Rejected result must now fail closed
+        ApproovService.SetServiceMutator(null);
+        ApproovService.NextFetchResult = new StubTokenFetchResult
+            { Status = ApproovTokenFetchStatus.Rejected, Token = "", ARC = "ARC1", RejectionReasons = "r1" };
+        var req2 = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
+        var response2 = ApproovService.UpdateRequestWithApproov(req2);
+        Assert.Equal(ApproovFetchDecision.ShouldFail, response2.Decision);
+        Assert.IsType<RejectionException>(response2.Error);
+    }
+
+    private sealed class FailOpenMutator : IApproovServiceMutator
+    {
+        public void HandlePrecheckResult(IApproovTokenFetchResult r) { }
+        public void HandleFetchTokenResult(IApproovTokenFetchResult r) { }
+        public void HandleFetchSecureStringResult(IApproovTokenFetchResult r, string op, string key) { }
+        public void HandleFetchCustomJWTResult(IApproovTokenFetchResult r) { }
+        public bool HandleInterceptorShouldProcessRequest(HttpRequestMessage req) => true;
+        public bool HandleInterceptorFetchTokenResult(IApproovTokenFetchResult r, string url) =>
+            r.Status == ApproovTokenFetchStatus.Success;
+        public bool HandleInterceptorHeaderSubstitutionResult(IApproovTokenFetchResult r, string h) => false;
+        public bool HandleInterceptorQueryParamSubstitutionResult(IApproovTokenFetchResult r, string k) => false;
+        public HttpRequestMessage HandleInterceptorProcessedRequest(
+            HttpRequestMessage req, ApproovRequestMutations ch) => req;
+        public bool HandlePinningShouldProcessRequest(HttpRequestMessage req) => true;
+    }
 }

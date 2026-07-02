@@ -27,6 +27,9 @@ public static partial class ApproovService
     // New: secure-string result override (for substitution edge-case tests)
     internal static StubTokenFetchResult? NextSecureStringResult = null;
 
+    // New: custom JWT call tracking (for bypass guard tests)
+    internal static int CustomJWTCallCount = 0;
+
     private static partial bool PlatformInitializeSdk(string config, string? comment)
     {
         InitCallCount++;
@@ -64,7 +67,10 @@ public static partial class ApproovService
     }
 
     private static partial IApproovTokenFetchResult PlatformFetchCustomJWTAndWait(string payload)
-        => new StubTokenFetchResult { Status = ApproovTokenFetchStatus.Success, Token = "stub-jwt" };
+    {
+        CustomJWTCallCount++;
+        return new StubTokenFetchResult { Status = ApproovTokenFetchStatus.Success, Token = "stub-jwt" };
+    }
 
     private static partial void PlatformSetDataHashInToken(string data)
     {

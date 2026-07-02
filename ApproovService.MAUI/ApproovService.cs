@@ -196,9 +196,9 @@ public static partial class ApproovService
         lock (_stateLock) { return _lastARC; }
     }
 
-    public static void SetServiceMutator(IApproovServiceMutator mutator)
+    public static void SetServiceMutator(IApproovServiceMutator? mutator)
     {
-        lock (_stateLock) { _serviceMutator = mutator; }
+        lock (_stateLock) { _serviceMutator = mutator ?? ApproovServiceMutatorDefault.Shared; }
     }
 
     public static IApproovServiceMutator GetServiceMutator()
@@ -326,6 +326,7 @@ public static partial class ApproovService
     public static IApproovTokenFetchResult FetchCustomJWT(string payload)
     {
         EnsureInitialized();
+        if (_isBypassMode) return new BypassFetchResult(ApproovTokenFetchStatus.Disabled);
         var result = PlatformFetchCustomJWTAndWait(payload);
         IApproovServiceMutator mutator;
         lock (_stateLock) { mutator = _serviceMutator; }

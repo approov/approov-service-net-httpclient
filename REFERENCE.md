@@ -18,7 +18,7 @@
 | `SetBodyDigestEnabled(bool enabled)` | Enable or disable automatic `Content-Digest` header generation for POST, PUT, and PATCH requests. Enabled by default. When enabled, the digest is computed and added before signing so signers can include `content-digest` as a signature component. Gracefully skips non-repeatable (streaming) bodies. |
 | `SetFailureCacheTTL(seconds)` | Failure cache TTL (default: 5.0 s). |
 | `SetLoggingLevel(level)` | `Off/Error/Warning/Info/Debug` (default: `Info`). |
-| `SetServiceMutator(mutator)` | Replace callback handler (default: `ApproovServiceMutatorDefault.Shared`). |
+| `SetServiceMutator(mutator)` | Replace callback handler (default: `ApproovServiceMutatorDefault.Shared`). Pass `null` to restore the default fail-closed mutator. |
 
 ## Substitution
 
@@ -38,7 +38,7 @@
 | `Precheck()` | Fetch token for `approov.io` to validate attestation. |
 | `FetchApproovToken(url)` | Fetch token for a URL. |
 | `FetchSecureString(key, newDef?)` | Fetch/update a secure string. |
-| `FetchCustomJWT(payload)` | Fetch a custom JWT. |
+| `FetchCustomJWT(payload)` | Fetch a custom JWT. In bypass mode returns a `Disabled` result without calling the SDK. |
 | `GetDeviceID()` | Returns the Approov device ID (`null` in bypass mode). |
 | `SetDataHashInToken(data)` | Hash arbitrary data into the token. |
 | `SetDevKey(devKey)` | Set a developer key for testing. |

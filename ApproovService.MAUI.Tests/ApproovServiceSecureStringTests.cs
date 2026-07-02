@@ -10,6 +10,7 @@ public class ApproovServiceSecureStringTests : IDisposable
     public void Dispose()
     {
         ApproovService.NextSecureStringResult = null;
+        ApproovService.CustomJWTCallCount = 0;
         ApproovService.ResetForTesting();
     }
 
@@ -61,8 +62,30 @@ public class ApproovServiceSecureStringTests : IDisposable
     public void FetchCustomJWT_Initialized_ReturnsStubJwt()
     {
         ApproovService.Initialize("dummy-config");
+        ApproovService.CustomJWTCallCount = 0;
         var result = ApproovService.FetchCustomJWT("{\"data\":\"test\"}");
         Assert.Equal(ApproovTokenFetchStatus.Success, result.Status);
         Assert.Equal("stub-jwt", result.Token);
+        Assert.Equal(1, ApproovService.CustomJWTCallCount);
+    }
+
+    [Fact]
+    public void FetchCustomJWT_NotInitialized_Throws()
+    {
+        Assert.Throws<InitializationFailureException>(
+            () => ApproovService.FetchCustomJWT("{\"data\":\"test\"}"));
+    }
+
+    [Fact]
+    public void FetchCustomJWT_BypassMode_DoesNotCallPlatformSdk()
+    {
+        ApproovService.Initialize("");
+        ApproovService.CustomJWTCallCount = 0;
+        // Same contract as the FetchApproovToken / FetchSecureString bypass guards:
+        // no throw, no platform SDK call, empty-token result with a non-Success status
+        var result = ApproovService.FetchCustomJWT("{\"data\":\"test\"}");
+        Assert.Equal(0, ApproovService.CustomJWTCallCount);
+        Assert.Equal(ApproovTokenFetchStatus.Disabled, result.Status);
+        Assert.Equal("", result.Token);
     }
 }
