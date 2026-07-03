@@ -1,5 +1,8 @@
 // ApproovService.MAUI.Tests/util/ApproovDefaultMessageSigningTests.cs
+using System.Net;
 using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using Approov.Util.Sig;
 using Xunit;
 
@@ -8,10 +11,15 @@ namespace Approov.Tests;
 [Collection("ApproovService")]
 public class ApproovDefaultMessageSigningTests : IDisposable
 {
+    public ApproovDefaultMessageSigningTests()
+    {
+        ApproovService.ResetPlatformStub();
+        ApproovService.ResetForTesting();
+    }
+
     public void Dispose()
     {
-        ApproovService.LastUserProperty = null;
-        ApproovService.InitCallCount = 0;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 
@@ -82,6 +90,69 @@ public class ApproovDefaultMessageSigningTests : IDisposable
             var result = ApproovService.SignRequest(req, tokenResult);
             Assert.True(result.Headers.Contains("Signature"),
                 $"Iteration {i}: Signature header missing");
+        }
+    }
+
+    [Fact]
+    public async Task Pipeline_NullSigningKey_RequestProceedsUnsignedWithoutError()
+    {
+        // The ONLY fail-open case: the platform cannot provide a signature
+        // (no signing key). The request proceeds without Signature headers.
+        ApproovService.Initialize("dummy-config");
+        ApproovService.SetServiceMutator(new SigningMutator(null));
+        var inner = new RecordingHandler();
+        var handler = new ApproovMessageHandler(inner);
+        using var client = new HttpClient(handler);
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
+
+        var response = await client.SendAsync(req);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(inner.Reached);
+        Assert.False(req.Headers.Contains("Signature"));
+        Assert.False(req.Headers.Contains("Signature-Input"));
+    }
+
+    [Fact]
+    public void SignRequest_InvalidKeyDerDecodeError_Propagates()
+    {
+        // A malformed PKCS#8 key produces an ASN.1/DER decode error inside the
+        // signer: a legitimate error that must NOT be swallowed (fail closed)
+        ApproovService.Initialize("dummy-config");
+        ApproovService.SetServiceMutator(new SigningMutator(new byte[] { 0x01, 0x02, 0x03 }));
+
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
+        var tokenResult = new StubTokenFetchResult
+            { Status = ApproovTokenFetchStatus.Success, Token = "t" };
+
+        Assert.Throws<System.Security.Cryptography.CryptographicException>(
+            () => ApproovService.SignRequest(req, tokenResult));
+    }
+
+    [Fact]
+    public async Task Pipeline_SignerDerDecodeError_FailsRequestClosed()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.SetServiceMutator(new SigningMutator(new byte[] { 0x01, 0x02, 0x03 }));
+        var inner = new RecordingHandler();
+        var handler = new ApproovMessageHandler(inner);
+        using var client = new HttpClient(handler);
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
+
+        await Assert.ThrowsAsync<System.Security.Cryptography.CryptographicException>(
+            () => client.SendAsync(req));
+        Assert.False(inner.Reached);
+    }
+
+    private sealed class RecordingHandler : HttpMessageHandler
+    {
+        public bool Reached { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Reached = true;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
         }
     }
 

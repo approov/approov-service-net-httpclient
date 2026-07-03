@@ -15,7 +15,13 @@ public class ApproovMessageHandler : DelegatingHandler
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
         if (ApproovService.IsBodyDigestEnabled())
-            await BodyDigest.TryAddAsync(request);
+        {
+            var digestOutcome = await BodyDigest.TryAddAsync(request);
+            if (digestOutcome == BodyDigestOutcome.CannotDigest
+                && ApproovService.IsBodyDigestRequired())
+                throw new PermanentException(
+                    "Content-Digest is required but the request body cannot be digested");
+        }
 
         var response = ApproovService.UpdateRequestWithApproov(request);
 

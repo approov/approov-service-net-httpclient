@@ -24,6 +24,7 @@ public static partial class ApproovService
     private static string? _bindingHeader = null;
     private static bool _useApproovStatusIfNoToken = false;
     private static bool _bodyDigestEnabled = true;
+    private static bool _bodyDigestRequired = false;
 
     // Service wiring
     private static IApproovServiceMutator _serviceMutator = ApproovServiceMutatorDefault.Shared;
@@ -106,6 +107,7 @@ public static partial class ApproovService
                 _approovTokenHeader = "Approov-Token"; _approovTokenPrefix = "";
                 _approovTraceIDHeader = null; _bindingHeader = null;
                 _useApproovStatusIfNoToken = false; _bodyDigestEnabled = true;
+                _bodyDigestRequired = false;
                 _serviceMutator = ApproovServiceMutatorDefault.Shared;
                 _substitutionHeaders = new(); _substitutionQueryParams = new();
                 _exclusionURLRegexs = new();
@@ -183,12 +185,33 @@ public static partial class ApproovService
 
     public static void SetBodyDigestEnabled(bool enabled)
     {
-        lock (_stateLock) { _bodyDigestEnabled = enabled; }
+        SetBodyDigestEnabled(enabled, false);
+    }
+
+    // Configures Content-Digest generation. When required is true (and the digest is
+    // enabled) a POST/PUT/PATCH request whose body cannot be digested (one-shot
+    // streaming content, or a digest computation failure) fails closed with a
+    // PermanentException instead of being sent without a Content-Digest header.
+    // A request with no body never fails: there is nothing to digest.
+    // required is only meaningful while enabled; each call fully specifies the config,
+    // so SetBodyDigestEnabled(enabled) clears any previously set required mode.
+    public static void SetBodyDigestEnabled(bool enabled, bool required)
+    {
+        lock (_stateLock)
+        {
+            _bodyDigestEnabled = enabled;
+            _bodyDigestRequired = enabled && required;
+        }
     }
 
     internal static bool IsBodyDigestEnabled()
     {
         lock (_stateLock) { return _bodyDigestEnabled; }
+    }
+
+    internal static bool IsBodyDigestRequired()
+    {
+        lock (_stateLock) { return _bodyDigestRequired; }
     }
 
     public static string? GetLastARC()
@@ -224,6 +247,7 @@ public static partial class ApproovService
             _approovTokenHeader = "Approov-Token"; _approovTokenPrefix = "";
             _approovTraceIDHeader = null; _bindingHeader = null;
             _useApproovStatusIfNoToken = false; _bodyDigestEnabled = true;
+            _bodyDigestRequired = false;
             _serviceMutator = ApproovServiceMutatorDefault.Shared;
             _substitutionHeaders = new(); _substitutionQueryParams = new();
             _exclusionURLRegexs = new(); _lastARC = "";
@@ -541,16 +565,13 @@ public static partial class ApproovService
     {
         IApproovServiceMutator mutator;
         lock (_stateLock) { mutator = _serviceMutator; }
-        try
-        {
-            return Util.Sig.ApproovDefaultMessageSigning.SignRequest(request, mutator, tokenResult);
-        }
-        catch (PermanentException) { throw; }
-        catch (Exception ex)
-        {
-            Log(ApproovLogLevel.Error, $"SignRequest failed (fail-open): {ex.Message}");
-            return request;
-        }
+        // The ONLY fail-open case — the platform cannot provide a signature (no
+        // signing key available) — is handled as a null value inside
+        // ApproovDefaultMessageSigning, which logs and returns the request unsigned.
+        // Any exception (ASN.1/DER decode error, header serialization failure,
+        // unsupported algorithm, ...) is a legitimate error and must propagate as a
+        // request failure rather than silently proceeding unsigned.
+        return Util.Sig.ApproovDefaultMessageSigning.SignRequest(request, mutator, tokenResult);
     }
 
     public static bool VerifyPinning(HttpRequestMessage request, X509Certificate2 serverCert)
