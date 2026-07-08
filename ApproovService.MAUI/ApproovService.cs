@@ -533,7 +533,6 @@ public static partial class ApproovService
             }
 
             request = mutator.HandleInterceptorProcessedRequest(request, mutations);
-            request = SignRequest(request, tokenResult);
 
             return new ApproovUpdateResponse { Request = request,
                 Decision = ApproovFetchDecision.ShouldProceed,
@@ -560,19 +559,6 @@ public static partial class ApproovService
         }
     }
 
-    internal static HttpRequestMessage SignRequest(HttpRequestMessage request,
-                                                   IApproovTokenFetchResult tokenResult)
-    {
-        IApproovServiceMutator mutator;
-        lock (_stateLock) { mutator = _serviceMutator; }
-        // The ONLY fail-open case — the platform cannot provide a signature (no
-        // signing key available) — is handled as a null value inside
-        // ApproovDefaultMessageSigning, which logs and returns the request unsigned.
-        // Any exception (ASN.1/DER decode error, header serialization failure,
-        // unsupported algorithm, ...) is a legitimate error and must propagate as a
-        // request failure rather than silently proceeding unsigned.
-        return Util.Sig.ApproovDefaultMessageSigning.SignRequest(request, mutator, tokenResult);
-    }
 
     public static bool VerifyPinning(HttpRequestMessage request, X509Certificate2 serverCert)
     {

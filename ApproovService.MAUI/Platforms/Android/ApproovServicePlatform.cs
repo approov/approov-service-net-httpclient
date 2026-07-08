@@ -51,20 +51,10 @@ public static partial class ApproovService
         => global::Com.Criticalblue.Approovsdk.Approov.DeviceID;
 
     private static partial string? PlatformGetAccountMessageSignature(string message)
-        => global::Com.Criticalblue.Approovsdk.Approov.GetMessageSignature(message);
+        => global::Com.Criticalblue.Approovsdk.Approov.GetAccountMessageSignature(message);
 
     private static partial string? PlatformGetInstallMessageSignature(string message)
-    {
-        try
-        {
-            var m = typeof(global::Com.Criticalblue.Approovsdk.Approov)
-                .GetMethod("GetInstallMessageSignature",
-                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public,
-                    null, new[] { typeof(string) }, null);
-            return m?.Invoke(null, new object[] { message }) as string;
-        }
-        catch { return null; }
-    }
+        => global::Com.Criticalblue.Approovsdk.Approov.GetInstallMessageSignature(message);
 
     private static partial string? PlatformGetPinsJSON(string pinType)
         => global::Com.Criticalblue.Approovsdk.Approov.GetPinsJSON(pinType);

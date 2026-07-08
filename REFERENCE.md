@@ -44,6 +44,8 @@
 | `SetDataHashInToken(data)` | Hash arbitrary data into the token. |
 | `SetDevKey(devKey)` | Set a developer key for testing. |
 | `FetchConfig()` | Retrieve the latest SDK config string. |
+| `GetAccountMessageSignature(message)` | Base64 HMAC-SHA256 signature over `message` using the account key (`null` in bypass mode). |
+| `GetInstallMessageSignature(message)` | Base64 ASN.1 DER ES256 signature over `message` using the per-install key (`null` in bypass mode). |
 
 ## HTTP integration
 
@@ -54,15 +56,29 @@
 | `ApproovService.VerifyPinning(request, cert)` | TLS pinning callback for `ServerCertificateCustomValidationCallback`. |
 | `ApproovService.UpdateRequestWithApproov(request)` | Core request mutation; returns `ApproovUpdateResponse`. |
 
-## Message signing failure contract
+## Message signing
 
-Requests are signed (via a mutator implementing `IApproovMessageSigner`) as the last
-step of `UpdateRequestWithApproov`. The failure contract is:
+Register `ApproovDefaultMessageSigning` as the service mutator to add RFC 9421
+`Signature` / `Signature-Input` headers. Requests are signed inside
+`HandleInterceptorProcessedRequest`, and only when the request already carries an
+Approov token (`ApproovRequestMutations.TokenHeaderKey != null`).
 
-- **Fail-open (proceed unsigned, logged) only when no signature is available**: the
-  signer's `GetSigningKey()` returns `null` (device has no key pair / no account key),
-  or no signature parameters factory is configured. The request proceeds without
-  `Signature`/`Signature-Input` headers.
-- **All other failures fail closed**: any exception raised while signing — ASN.1/DER
-  key decode error, structured-field/header serialization failure, unsupported signing
-  algorithm — propagates as a request failure instead of silently proceeding unsigned.
+| Type / method | Description |
+|---------------|-------------|
+| `ApproovDefaultMessageSigning` | Mutator that signs requests. `SetDefaultFactory(f)`, `PutHostFactory(host, f)`. |
+| `ApproovDefaultMessageSigning.GenerateDefaultSignatureParametersFactory()` | Default: install signing over `@method`, `@target-uri`, the token/trace-ID headers, optional `Authorization`/`Content-Length`/`Content-Type`, with `created` + 15 s `expires`. |
+| `SignatureParametersFactory` | Fluent config: `SetBaseParameters`, `SetUseInstallMessageSigning`/`SetUseAccountMessageSigning`, `SetAddCreated`, `SetExpiresLifetime`, `SetAddApproovTokenHeader`, `SetAddApproovTraceIDHeader`, `AddOptionalHeaders`, `SetBodyDigestConfig`. |
+
+Algorithms and signature ids:
+
+- **install** — `alg="ecdsa-p256-sha256"`; the SDK's base64 ASN.1 DER signature is decoded to
+  the raw R‖S (64 byte) form per RFC 9421 §3.3.4.
+- **account** — `alg="hmac-sha256"`; the SDK's base64 HMAC is used directly.
+
+Failure contract:
+
+- **Fail-open** — if the SDK cannot provide a signature (`GetInstallMessageSignature` /
+  `GetAccountMessageSignature` returns `null`/empty), or no factory is configured, the request
+  proceeds without `Signature`/`Signature-Input` headers.
+- **Fail-closed** — any exception raised while signing (DER decode error, serialization failure,
+  unsupported `alg`, or a missing required `Content-Digest`) propagates as a request failure.

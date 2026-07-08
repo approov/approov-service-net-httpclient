@@ -1,8 +1,11 @@
 // ApproovService.MAUI.Tests/util/ApproovDefaultMessageSigningTests.cs
-using System.Net;
+// Tests for the retrofit-mirrored message signing: install (ES256) + account (HS256) modes.
+using System;
+using System.Formats.Asn1;
 using System.Net.Http;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Numerics;
+using System.Security.Cryptography;
+using Approov.Util.HttpSfv;
 using Approov.Util.Sig;
 using Xunit;
 
@@ -23,169 +26,140 @@ public class ApproovDefaultMessageSigningTests : IDisposable
         ApproovService.ResetForTesting();
     }
 
-    [Fact]
-    public void SignRequest_DefaultMutator_ReturnsUnchangedRequest()
+    // --- helpers ---------------------------------------------------------
+
+    private static ApproovDefaultMessageSigning.SignatureParametersFactory MinimalFactory(bool account)
     {
-        // Default mutator's GetSignatureParametersFactory returns null (no signing)
-        ApproovService.Initialize("dummy-config");
-        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
-        var tokenResult = new StubTokenFetchResult { Status = ApproovTokenFetchStatus.Success, Token = "t" };
-        var result = ApproovService.SignRequest(req, tokenResult);
-        // No Signature header expected when factory returns null
-        Assert.False(result.Headers.Contains("Signature"));
+        var baseParams = new SignatureParameters();
+        baseParams.AddComponentIdentifier(new StringItem("@method"));
+        var f = new ApproovDefaultMessageSigning.SignatureParametersFactory()
+            .SetBaseParameters(baseParams)
+            .SetAddApproovTokenHeader(true);
+        return account ? f.SetUseAccountMessageSigning() : f.SetUseInstallMessageSigning();
     }
 
-    [Fact]
-    public void SignRequest_WithSigningKey_AddsSignatureAndInputHeaders()
+    private static (ApproovDefaultMessageSigning signer, HttpRequestMessage req, ApproovRequestMutations changes)
+        Setup(ApproovDefaultMessageSigning.SignatureParametersFactory factory)
     {
-        ApproovService.Initialize("dummy-config");
-        using var ecdsa = System.Security.Cryptography.ECDsa.Create(
-            System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
-        byte[] key = ecdsa.ExportPkcs8PrivateKey();
-        ApproovService.SetServiceMutator(new SigningMutator(key));
-
-        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
-        var tokenResult = new StubTokenFetchResult
-            { Status = ApproovTokenFetchStatus.Success, Token = "t" };
-        var result = ApproovService.SignRequest(req, tokenResult);
-
-        Assert.True(result.Headers.Contains("Signature"));
-        Assert.True(result.Headers.Contains("Signature-Input"));
+        var signer = new ApproovDefaultMessageSigning().SetDefaultFactory(factory);
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://shapes.approov.io/v5/shapes");
+        req.Headers.Add("Approov-Token", "the-token");
+        var changes = new ApproovRequestMutations { TokenHeaderKey = "Approov-Token" };
+        return (signer, req, changes);
     }
 
+    private static byte[] SignatureBytes(HttpRequestMessage req)
+    {
+        string v = string.Join("", req.Headers.GetValues("Signature"));      // label=:base64:
+        int start = v.IndexOf(':') + 1;
+        int end = v.LastIndexOf(':');
+        return Convert.FromBase64String(v.Substring(start, end - start));
+    }
+
+    private static string SignatureInput(HttpRequestMessage req)
+        => string.Join("", req.Headers.GetValues("Signature-Input"));
+
+    // --- tests -----------------------------------------------------------
+
     [Fact]
-    public void SignRequest_NullSigningKey_FailOpenNoSignatureHeaders()
+    public void NoApproovToken_LeavesRequestUnsigned()
     {
         ApproovService.Initialize("dummy-config");
-        // GetSigningKey() returns null → fail-open, no headers added
-        ApproovService.SetServiceMutator(new SigningMutator(null));
+        var (signer, req, _) = Setup(MinimalFactory(account: true));
+        var changesNoToken = new ApproovRequestMutations { TokenHeaderKey = null };
 
-        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
-        var tokenResult = new StubTokenFetchResult
-            { Status = ApproovTokenFetchStatus.Success, Token = "t" };
-        var result = ApproovService.SignRequest(req, tokenResult);
+        var result = signer.HandleInterceptorProcessedRequest(req, changesNoToken);
 
         Assert.False(result.Headers.Contains("Signature"));
         Assert.False(result.Headers.Contains("Signature-Input"));
     }
 
     [Fact]
-    public void SignRequest_RepeatSigning_DERNeverCrashes()
+    public void AccountMode_AddsAccountLabelledHmacSignature()
     {
-        // Generates 60 signatures across different messages.
-        // EC signatures produce random r/s values; this exercises DER edge cases
-        // (leading-zero stripping, high-bit padding) without requiring them to appear.
         ApproovService.Initialize("dummy-config");
-        using var ecdsa = System.Security.Cryptography.ECDsa.Create(
-            System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
-        byte[] key = ecdsa.ExportPkcs8PrivateKey();
-        ApproovService.SetServiceMutator(new SigningMutator(key));
+        byte[] hmac = new byte[32];
+        for (int i = 0; i < hmac.Length; i++) hmac[i] = (byte)(i + 1);
+        ApproovService.AccountSignatureResult = Convert.ToBase64String(hmac);
 
-        for (int i = 0; i < 60; i++)
-        {
-            var req = new HttpRequestMessage(HttpMethod.Post,
-                $"https://example.com/api/{i}");
-            var tokenResult = new StubTokenFetchResult
-                { Status = ApproovTokenFetchStatus.Success, Token = $"token-{i}" };
-            var result = ApproovService.SignRequest(req, tokenResult);
-            Assert.True(result.Headers.Contains("Signature"),
-                $"Iteration {i}: Signature header missing");
-        }
+        var (signer, req, changes) = Setup(MinimalFactory(account: true));
+        var result = signer.HandleInterceptorProcessedRequest(req, changes);
+
+        Assert.Equal(1, ApproovService.AccountSignatureCallCount);
+        Assert.StartsWith("account=:", string.Join("", result.Headers.GetValues("Signature")));
+        Assert.StartsWith("account=(", SignatureInput(result));
+        Assert.Contains("alg=\"hmac-sha256\"", SignatureInput(result));
+        Assert.Equal(hmac, SignatureBytes(result)); // used directly, no transform
     }
 
     [Fact]
-    public async Task Pipeline_NullSigningKey_RequestProceedsUnsignedWithoutError()
+    public void InstallMode_DecodesDerSignatureToRaw64Bytes()
     {
-        // The ONLY fail-open case: the platform cannot provide a signature
-        // (no signing key). The request proceeds without Signature headers.
         ApproovService.Initialize("dummy-config");
-        ApproovService.SetServiceMutator(new SigningMutator(null));
-        var inner = new RecordingHandler();
-        var handler = new ApproovMessageHandler(inner);
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
+        using var ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        byte[] der = ec.SignData(new byte[] { 1, 2, 3 }, HashAlgorithmName.SHA256,
+            DSASignatureFormat.Rfc3279DerSequence);
+        ApproovService.InstallSignatureResult = Convert.ToBase64String(der);
 
-        var response = await client.SendAsync(req);
+        var (signer, req, changes) = Setup(MinimalFactory(account: false));
+        var result = signer.HandleInterceptorProcessedRequest(req, changes);
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(inner.Reached);
-        Assert.False(req.Headers.Contains("Signature"));
-        Assert.False(req.Headers.Contains("Signature-Input"));
+        Assert.Equal(1, ApproovService.InstallSignatureCallCount);
+        Assert.StartsWith("install=:", string.Join("", result.Headers.GetValues("Signature")));
+        Assert.Contains("alg=\"ecdsa-p256-sha256\"", SignatureInput(result));
+        Assert.Equal(64, SignatureBytes(result).Length); // raw R||S, RFC 9421 §3.3.4
     }
 
     [Fact]
-    public void SignRequest_InvalidKeyDerDecodeError_Propagates()
+    public void InstallMode_NoSignatureAvailable_SkipsSigning()
     {
-        // A malformed PKCS#8 key produces an ASN.1/DER decode error inside the
-        // signer: a legitimate error that must NOT be swallowed (fail closed)
         ApproovService.Initialize("dummy-config");
-        ApproovService.SetServiceMutator(new SigningMutator(new byte[] { 0x01, 0x02, 0x03 }));
+        ApproovService.InstallSignatureResult = null; // SDK cannot provide a signature
 
-        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
-        var tokenResult = new StubTokenFetchResult
-            { Status = ApproovTokenFetchStatus.Success, Token = "t" };
+        var (signer, req, changes) = Setup(MinimalFactory(account: false));
+        var result = signer.HandleInterceptorProcessedRequest(req, changes);
 
-        Assert.Throws<System.Security.Cryptography.CryptographicException>(
-            () => ApproovService.SignRequest(req, tokenResult));
+        Assert.False(result.Headers.Contains("Signature"));
+        Assert.False(result.Headers.Contains("Signature-Input"));
     }
 
     [Fact]
-    public async Task Pipeline_SignerDerDecodeError_FailsRequestClosed()
+    public void DefaultFactory_CoversMethodTargetUriAndApproovTokenWithCreatedExpires()
     {
         ApproovService.Initialize("dummy-config");
-        ApproovService.SetServiceMutator(new SigningMutator(new byte[] { 0x01, 0x02, 0x03 }));
-        var inner = new RecordingHandler();
-        var handler = new ApproovMessageHandler(inner);
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
+        using var ec = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        ApproovService.InstallSignatureResult = Convert.ToBase64String(
+            ec.SignData(new byte[] { 9 }, HashAlgorithmName.SHA256, DSASignatureFormat.Rfc3279DerSequence));
 
-        await Assert.ThrowsAsync<System.Security.Cryptography.CryptographicException>(
-            () => client.SendAsync(req));
-        Assert.False(inner.Reached);
+        var factory = ApproovDefaultMessageSigning.GenerateDefaultSignatureParametersFactory();
+        factory.NowSeconds = () => 1000L; // deterministic created/expires
+        var (signer, req, changes) = Setup(factory);
+
+        var result = signer.HandleInterceptorProcessedRequest(req, changes);
+
+        Assert.Equal(
+            "install=(\"@method\" \"@target-uri\" \"approov-token\");alg=\"ecdsa-p256-sha256\";created=1000;expires=1015",
+            SignatureInput(result));
     }
 
-    private sealed class RecordingHandler : HttpMessageHandler
+    [Fact]
+    public void DerEcdsaToRaw_ConvertsDerSequenceToFixed64Bytes()
     {
-        public bool Reached { get; private set; }
-
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        using (writer.PushSequence())
         {
-            Reached = true;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            writer.WriteInteger(new BigInteger(0x1122)); // r
+            writer.WriteInteger(new BigInteger(0x33));    // s
         }
-    }
+        byte[] der = writer.Encode();
 
-    private sealed class SigningMutator : IApproovServiceMutator, Approov.Util.Sig.IApproovMessageSigner
-    {
-        private readonly byte[]? _key;
-        public SigningMutator(byte[]? key) => _key = key;
+        byte[] raw = ApproovDefaultMessageSigning.DerEcdsaToRaw(der);
 
-        public void HandlePrecheckResult(IApproovTokenFetchResult r) { }
-        public void HandleFetchTokenResult(IApproovTokenFetchResult r) { }
-        public void HandleFetchSecureStringResult(IApproovTokenFetchResult r, string op, string key) { }
-        public void HandleFetchCustomJWTResult(IApproovTokenFetchResult r) { }
-        public bool HandleInterceptorShouldProcessRequest(System.Net.Http.HttpRequestMessage req) => true;
-        public bool HandleInterceptorFetchTokenResult(IApproovTokenFetchResult r, string url) => true;
-        public bool HandleInterceptorHeaderSubstitutionResult(IApproovTokenFetchResult r, string h) => true;
-        public bool HandleInterceptorQueryParamSubstitutionResult(IApproovTokenFetchResult r, string k) => true;
-        public System.Net.Http.HttpRequestMessage HandleInterceptorProcessedRequest(
-            System.Net.Http.HttpRequestMessage req, ApproovRequestMutations c) => req;
-        public bool HandlePinningShouldProcessRequest(System.Net.Http.HttpRequestMessage req) => true;
-
-        Approov.Util.Sig.SignatureParametersFactory? Approov.Util.Sig.IApproovMessageSigner.GetSignatureParametersFactory()
-        {
-            return (req, token) =>
-            {
-                var sp = new Approov.Util.Sig.SignatureParameters();
-                sp.AddComponentIdentifier(new Approov.Util.HttpSfv.StringItem("@method"));
-                sp.AddParameter("created", 1735000000L);
-                return sp;
-            };
-        }
-
-        byte[]? Approov.Util.Sig.IApproovMessageSigner.GetSigningKey() => _key;
-        string Approov.Util.Sig.IApproovMessageSigner.SignatureLabel => "sig1";
-        string Approov.Util.Sig.IApproovMessageSigner.SignatureParamsLabel => "sig-params";
+        Assert.Equal(64, raw.Length);
+        Assert.Equal(0x11, raw[30]);   // r big-endian, right-aligned in first 32 bytes
+        Assert.Equal(0x22, raw[31]);
+        Assert.Equal(0x00, raw[29]);   // left-padded
+        Assert.Equal(0x33, raw[63]);   // s big-endian, right-aligned in second 32 bytes
+        Assert.Equal(0x00, raw[32]);
     }
 }

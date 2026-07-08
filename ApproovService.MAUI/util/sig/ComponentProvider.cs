@@ -19,6 +19,7 @@ public class ApproovHttpMessageComponentProvider : IComponentProvider
         return identifier switch
         {
             "@method" => _request.Method.Method.ToUpperInvariant(),
+            "@target-uri" => _request.RequestUri?.AbsoluteUri ?? "",
             "@path" => _request.RequestUri?.AbsolutePath ?? "/",
             "@authority" => _request.RequestUri?.Authority ?? "",
             "@scheme" => _request.RequestUri?.Scheme ?? "",

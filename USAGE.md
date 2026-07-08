@@ -115,31 +115,50 @@ Use `AddExclusionURLRegex(name, pattern)` to exclude URLs from substitution (e.g
 
 ## HTTP Message Signing
 
-Opt into HTTP message signing by implementing `IApproovMessageSigner` on your mutator:
+HTTP message signing is provided by `ApproovDefaultMessageSigning`, registered as the service
+mutator. It adds RFC 9421 `Signature` / `Signature-Input` headers to every request that already
+carries an Approov token (requests without a token are never signed). Two modes are supported:
+
+- **Install signing** — `alg="ecdsa-p256-sha256"`, signature id `install` (the default). Signed
+  with the per-install device key. The SDK returns an ASN.1 DER signature, which is emitted as the
+  raw R‖S (64 byte) form required by RFC 9421 §3.3.4.
+- **Account signing** — `alg="hmac-sha256"`, signature id `account`. Signed with the account key.
+
+Register the default configuration — install signing over `@method`, `@target-uri`, the Approov
+token header and trace-ID header, optional `Authorization`/`Content-Length`/`Content-Type` when
+present, plus `created` and a 15-second `expires`:
 
 ```csharp
-public class SigningMutator : ApproovServiceMutatorDefault, IApproovMessageSigner
-{
-    public SignatureParametersFactory? GetSignatureParametersFactory()
-    {
-        return (request, token) =>
-        {
-            var sp = new SignatureParameters();
-            sp.AddComponentIdentifier(new StringItem("@method"));
-            sp.AddComponentIdentifier(new StringItem("@target-uri"));
-            sp.AddComponentIdentifier(new StringItem("content-digest")); // if body digest enabled
-            sp.AddParameter("created", DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-            return sp;
-        };
-    }
-
-    public byte[]? GetSigningKey() => LoadKeyFromSecureStorage();
-    public string SignatureLabel => "sig1";
-    public string SignatureParamsLabel => "sig-params";
-}
+ApproovService.Initialize("<your-config-string>");
+ApproovService.SetServiceMutator(
+    new ApproovDefaultMessageSigning().SetDefaultFactory(
+        ApproovDefaultMessageSigning.GenerateDefaultSignatureParametersFactory()));
 ```
 
-The `Signature` and `Signature-Input` headers are added automatically to every request processed by `ApproovMessageHandler`.
+Customize what is covered with a `SignatureParametersFactory`, and vary it per host:
+
+```csharp
+var baseParams = new SignatureParameters();
+baseParams.AddComponentIdentifier(new StringItem("@method"));
+baseParams.AddComponentIdentifier(new StringItem("@target-uri"));
+
+var factory = new ApproovDefaultMessageSigning.SignatureParametersFactory()
+    .SetBaseParameters(baseParams)
+    .SetUseInstallMessageSigning()             // or .SetUseAccountMessageSigning()
+    .SetAddCreated(true)
+    .SetExpiresLifetime(15)
+    .SetAddApproovTokenHeader(true)
+    .SetAddApproovTraceIDHeader(true)
+    .AddOptionalHeaders("Authorization", "Content-Type")
+    .SetBodyDigestConfig(ApproovDefaultMessageSigning.DIGEST_SHA256, false);
+
+ApproovService.SetServiceMutator(
+    new ApproovDefaultMessageSigning()
+        .SetDefaultFactory(factory)
+        .PutHostFactory("api.example.com", otherFactory));
+```
+
+Signing is **fail-open**: if the SDK cannot provide a signature the request proceeds unsigned.
 
 ## Body Digest
 
