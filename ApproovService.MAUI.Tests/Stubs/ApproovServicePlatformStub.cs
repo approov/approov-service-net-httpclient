@@ -10,6 +10,8 @@ public static partial class ApproovService
     internal static StubTokenFetchResult? NextFetchResult = null;
     internal static int FetchCallCount = 0;
     internal static string? LastFetchUrl = null;
+    // When set, the next platform token fetch throws this exception (one-shot).
+    internal static Exception? NextFetchException = null;
 
     // New: SDK init tracking
     internal static int InitCallCount = 0;
@@ -51,12 +53,15 @@ public static partial class ApproovService
     internal static string? PinsJson = null;
     internal static string? LastPinType = null;
     internal static byte[]? PublicKeyBytes = null;
+    // When true, public-key extraction fails for every certificate (cannot pin it).
+    internal static bool ExtractReturnsNull = false;
 
     internal static void ResetPlatformStub()
     {
         NextFetchResult = null;
         FetchCallCount = 0;
         LastFetchUrl = null;
+        NextFetchException = null;
         InitCallCount = 0;
         NextInitShouldThrow = false;
         NextInitReturnsFalse = false;
@@ -84,6 +89,7 @@ public static partial class ApproovService
         PinsJson = null;
         LastPinType = null;
         PublicKeyBytes = null;
+        ExtractReturnsNull = false;
     }
 
     private static partial bool PlatformInitializeSdk(string config, string? comment)
@@ -113,6 +119,7 @@ public static partial class ApproovService
     {
         FetchCallCount++;
         LastFetchUrl = url;
+        if (NextFetchException != null) { var e = NextFetchException; NextFetchException = null; throw e; }
         if (NextFetchResult != null) { var r = NextFetchResult; NextFetchResult = null; return r; }
         return new StubTokenFetchResult { Status = ApproovTokenFetchStatus.Success, Token = "stub-token" };
     }
@@ -169,5 +176,11 @@ public static partial class ApproovService
     }
 
     private static partial string? PlatformFetchConfig() => FetchConfigResult;
-    private static partial byte[]? PlatformExtractPublicKeyBytes(X509Certificate2 cert) => PublicKeyBytes;
+
+    // When PublicKeyBytes is set, return it for every certificate (single-cert tests).
+    // Otherwise return the certificate's real DER SubjectPublicKeyInfo, matching the
+    // native platforms (Java publicKey.GetEncoded() / RSA|ECDsa.ExportSubjectPublicKeyInfo),
+    // so distinct chain elements yield distinct pins.
+    private static partial byte[]? PlatformExtractPublicKeyBytes(X509Certificate2 cert)
+        => ExtractReturnsNull ? null : (PublicKeyBytes ?? cert.PublicKey.ExportSubjectPublicKeyInfo());
 }

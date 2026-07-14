@@ -1,4 +1,5 @@
 // ApproovService.MAUI/ApproovService.cs
+using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 
@@ -560,7 +561,28 @@ public static partial class ApproovService
     }
 
 
-    public static bool VerifyPinning(HttpRequestMessage request, X509Certificate2 serverCert)
+    /// <summary>
+    /// Decides whether to trust the server for a TLS handshake. Enforces normal certificate
+    /// validation first (rejecting expired, hostname-mismatched or otherwise untrusted
+    /// certificates), then applies Approov public-key pinning across the validated chain.
+    /// Intended for use as an <see cref="System.Net.Http.HttpClientHandler"/>
+    /// ServerCertificateCustomValidationCallback.
+    /// </summary>
+    public static bool VerifyServerTrust(HttpRequestMessage request,
+        X509Certificate2? serverCert, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
+    {
+        // Preserve the platform's own certificate validation: any chain, hostname or
+        // name/expiry failure it reported must reject the connection before pinning.
+        if (sslPolicyErrors != SslPolicyErrors.None) return false;
+        if (serverCert == null || chain == null) return false;
+        var chainCertificates = new List<X509Certificate2>(chain.ChainElements.Count);
+        foreach (var element in chain.ChainElements)
+            chainCertificates.Add(element.Certificate);
+        return VerifyPinning(request, chainCertificates);
+    }
+
+    public static bool VerifyPinning(HttpRequestMessage request,
+        IReadOnlyList<X509Certificate2> chainCertificates)
     {
         if (!_sdkInitialized || _isBypassMode) return true;
         IApproovServiceMutator mutator;
@@ -574,16 +596,37 @@ public static partial class ApproovService
         if (string.IsNullOrEmpty(host)) return true;
 
         using var pinsDoc = System.Text.Json.JsonDocument.Parse(pinsJson);
-        if (!pinsDoc.RootElement.TryGetProperty(host, out var pinArray)) return true;
+        var root = pinsDoc.RootElement;
+        // Host not present in the pin set: this host is not being pinned, so accept.
+        if (!root.TryGetProperty(host, out var pinArray)) return true;
 
-        byte[]? certKeyBytes = PlatformExtractPublicKeyBytes(serverCert);
-        if (certKeyBytes == null) return false;
+        // An empty pin list for the host means "use the managed trust roots" published
+        // under the "*" entry, if any.
+        if (pinArray.ValueKind == System.Text.Json.JsonValueKind.Array
+            && pinArray.GetArrayLength() == 0
+            && root.TryGetProperty("*", out var managedRoots))
+            pinArray = managedRoots;
 
-        using var sha256 = System.Security.Cryptography.SHA256.Create();
-        string certPinBase64 = Convert.ToBase64String(sha256.ComputeHash(certKeyBytes));
+        // Still no pins to enforce: the chain already passed certificate validation, so
+        // this level of trust is acceptable and the connection is allowed.
+        if (pinArray.ValueKind != System.Text.Json.JsonValueKind.Array
+            || pinArray.GetArrayLength() == 0)
+            return true;
 
+        var pins = new HashSet<string>();
         foreach (var pin in pinArray.EnumerateArray())
-            if (pin.GetString() == certPinBase64) return true;
+            if (pin.GetString() is { } s) pins.Add(s);
+
+        // Match a pin against the public key of any certificate in the validated chain
+        // (leaf, intermediates or root), mirroring the other Approov service libraries.
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        foreach (var certificate in chainCertificates)
+        {
+            byte[]? certKeyBytes = PlatformExtractPublicKeyBytes(certificate);
+            if (certKeyBytes == null) continue; // cannot pin this element; already validated
+            string certPinBase64 = Convert.ToBase64String(sha256.ComputeHash(certKeyBytes));
+            if (pins.Contains(certPinBase64)) return true;
+        }
         return false;
     }
 }

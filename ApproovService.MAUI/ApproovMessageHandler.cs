@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Http;
-using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -49,11 +48,7 @@ public class ApproovMessageHandler : DelegatingHandler
         var handler = new HttpClientHandler();
         handler.ServerCertificateCustomValidationCallback =
             (message, cert, chain, errors) =>
-            {
-                if (cert == null) return false;
-                using var x509 = new X509Certificate2(cert.RawData);
-                return ApproovService.VerifyPinning(message, x509);
-            };
+                ApproovService.VerifyServerTrust(message, cert, chain, errors);
         return handler;
     }
 }
