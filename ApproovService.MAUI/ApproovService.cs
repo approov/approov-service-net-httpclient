@@ -13,10 +13,13 @@ public static partial class ApproovService
     private static readonly object _loggingLock = new();
     private static readonly object _failureCacheLock = new();
 
-    // Initialization state
-    private static bool _sdkInitialized = false;
+    // Initialization state. These flags are written under _initLock but read lock-free on
+    // hot paths (EnsureInitialized, UpdateRequestWithApproov, VerifyPinning); volatile gives
+    // those reads acquire semantics so they observe a completed Initialize. _isBypassMode is
+    // written before _sdkInitialized, so a reader that sees _sdkInitialized also sees it.
+    private static volatile bool _sdkInitialized = false;
     private static string? _configUsed = null;
-    private static bool _isBypassMode = false;
+    private static volatile bool _isBypassMode = false;
 
     // Token configuration
     private static string _approovTokenHeader = "Approov-Token";
