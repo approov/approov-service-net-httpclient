@@ -18,7 +18,7 @@ public class ApproovHttpMessageComponentProvider : IComponentProvider
     {
         return identifier switch
         {
-            "@method" => _request.Method.Method.ToUpperInvariant(),
+            "@method" => _request.Method.Method,
             "@target-uri" => _request.RequestUri?.AbsoluteUri ?? "",
             "@path" => _request.RequestUri?.AbsolutePath ?? "/",
             "@authority" => _request.RequestUri?.Authority ?? "",
@@ -35,9 +35,10 @@ public class ApproovHttpMessageComponentProvider : IComponentProvider
 
     private string GetQuery()
     {
-        // Strip leading '?' to match Swift's URL.query behavior
+        // RFC 9421 §2.2.7: the @query value includes the leading '?', and an absent query
+        // is represented by a single '?'. .NET's Uri.Query already retains the leading '?'.
         string q = _request.RequestUri?.Query ?? "";
-        return q.StartsWith("?") ? q.Substring(1) : q;
+        return q.Length > 0 ? q : "?";
     }
 
     private string GetRequestTarget()

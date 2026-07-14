@@ -10,11 +10,20 @@ public class ComponentProviderTests
         => new HttpRequestMessage(method ?? HttpMethod.Get, url);
 
     [Fact]
-    public void GetComponentValue_Method_ReturnsUpperCaseMethod()
+    public void GetComponentValue_Method_ReturnsMethodValue()
     {
         var req = MakeRequest("https://example.com/path");
         var provider = new ApproovHttpMessageComponentProvider(req);
         Assert.Equal("GET", provider.GetComponentValue("@method"));
+    }
+
+    [Fact]
+    public void GetComponentValue_Method_PreservesCustomMethodCase()
+    {
+        // RFC 9421 §2.2.1 performs no case transformation; HTTP methods are case-sensitive.
+        var req = MakeRequest("https://example.com/path", new HttpMethod("CustomVerb"));
+        var provider = new ApproovHttpMessageComponentProvider(req);
+        Assert.Equal("CustomVerb", provider.GetComponentValue("@method"));
     }
 
     [Fact]
@@ -34,12 +43,21 @@ public class ComponentProviderTests
     }
 
     [Fact]
-    public void GetComponentValue_Query_ReturnsQueryWithoutLeadingMark()
+    public void GetComponentValue_Query_RetainsLeadingQuestionMark()
     {
         var req = MakeRequest("https://example.com/path?foo=bar&baz=qux");
         var provider = new ApproovHttpMessageComponentProvider(req);
-        // Swift URL.query strips the leading '?'; C# Uri.Query retains it
-        Assert.Equal("foo=bar&baz=qux", provider.GetComponentValue("@query"));
+        // RFC 9421 §2.2.7 includes the leading '?' in the @query value.
+        Assert.Equal("?foo=bar&baz=qux", provider.GetComponentValue("@query"));
+    }
+
+    [Fact]
+    public void GetComponentValue_Query_AbsentQuery_ReturnsQuestionMark()
+    {
+        var req = MakeRequest("https://example.com/path");
+        var provider = new ApproovHttpMessageComponentProvider(req);
+        // RFC 9421 §2.2.7 represents an absent query as a single '?'.
+        Assert.Equal("?", provider.GetComponentValue("@query"));
     }
 
     [Fact]
