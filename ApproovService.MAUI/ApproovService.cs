@@ -103,7 +103,7 @@ public static partial class ApproovService
             if (!newlyInitialized)
                 Log(ApproovLogLevel.Info,
                     "Platform SDK reports already initialized: treated as success");
-            PlatformSetUserProperty("approov-service-maui/3.5.11");
+            PlatformSetUserProperty("approov-service-maui/3.5.5");
 
             // Platform success: reset and re-commit service-layer state
             lock (_stateLock)

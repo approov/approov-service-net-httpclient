@@ -3,7 +3,7 @@
     <TargetFrameworks>net9.0-android;net9.0-ios</TargetFrameworks>
     <RootNamespace>Approov</RootNamespace>
     <AssemblyName>Approov.Service.Maui</AssemblyName>
-    <Version>3.5.11</Version>
+    <Version>3.5.5</Version>
     <Authors>Approov Ltd</Authors>
     <Description>Approov service layer for .NET MAUI (Android + iOS)</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

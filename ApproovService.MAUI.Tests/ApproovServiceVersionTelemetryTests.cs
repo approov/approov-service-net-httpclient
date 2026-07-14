@@ -10,15 +10,13 @@ public class ApproovServiceVersionTelemetryTests : IDisposable
     public ApproovServiceVersionTelemetryTests()
     {
         // Reset shared state before each test in case a prior test class left it dirty
-        ApproovService.LastUserProperty = null;
-        ApproovService.InitCallCount = 0;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 
     public void Dispose()
     {
-        ApproovService.LastUserProperty = null;
-        ApproovService.InitCallCount = 0;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 
@@ -26,7 +24,7 @@ public class ApproovServiceVersionTelemetryTests : IDisposable
     public void Initialize_RealConfig_SetsUserPropertyWithVersion()
     {
         ApproovService.Initialize("dummy-config");
-        Assert.Equal("approov-service-maui/3.5.11", ApproovService.LastUserProperty);
+        Assert.Equal("approov-service-maui/3.5.5", ApproovService.LastUserProperty);
     }
 
     [Fact]
@@ -45,6 +43,6 @@ public class ApproovServiceVersionTelemetryTests : IDisposable
             dir = dir.Parent;
         Assert.NotNull(dir);
         string changelog = File.ReadAllText(Path.Combine(dir!.FullName, "CHANGELOG.md"));
-        Assert.Contains("[3.5.11]", changelog);
+        Assert.Contains("[3.5.5]", changelog);
     }
 }
