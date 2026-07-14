@@ -637,12 +637,13 @@ public static partial class ApproovService
     private static IApproovTokenFetchResult FetchApproovTokenWithFailureCache(string url)
     {
         ManualResetEventSlim? waitHandle;
+        bool isLeader;
         lock (_failureCacheLock)
         {
             if (_failureCacheResult != null && DateTime.UtcNow < _failureCacheExpiry)
                 return _failureCacheResult;
-            if (_failureCacheMissGroup != null) { waitHandle = _failureCacheMissGroup; }
-            else { _failureCacheMissGroup = new ManualResetEventSlim(false); waitHandle = null; }
+            if (_failureCacheMissGroup != null) { waitHandle = _failureCacheMissGroup; isLeader = false; }
+            else { _failureCacheMissGroup = new ManualResetEventSlim(false); waitHandle = null; isLeader = true; }
         }
         if (waitHandle != null)
         {
@@ -652,23 +653,38 @@ public static partial class ApproovService
                 if (_failureCacheResult != null && DateTime.UtcNow < _failureCacheExpiry)
                     return _failureCacheResult;
             }
+            // The leader's result was not cacheable; fetch our own without owning the
+            // miss-group (a fresh leader will coalesce any subsequent callers).
+            return PlatformFetchApproovTokenAndWait(url);
         }
-        var result = PlatformFetchApproovTokenAndWait(url);
-        lock (_failureCacheLock)
+        try
         {
-            if (result.Status is ApproovTokenFetchStatus.NoNetwork
-                or ApproovTokenFetchStatus.PoorNetwork or ApproovTokenFetchStatus.MitmDetected)
+            var result = PlatformFetchApproovTokenAndWait(url);
+            lock (_failureCacheLock)
             {
-                double ttl;
-                lock (_stateLock) { ttl = _failureCacheTTL; }
-                _failureCacheResult = result;
-                _failureCacheExpiry = DateTime.UtcNow.AddSeconds(ttl);
+                if (result.Status is ApproovTokenFetchStatus.NoNetwork
+                    or ApproovTokenFetchStatus.PoorNetwork or ApproovTokenFetchStatus.MitmDetected)
+                {
+                    double ttl;
+                    lock (_stateLock) { ttl = _failureCacheTTL; }
+                    _failureCacheResult = result;
+                    _failureCacheExpiry = DateTime.UtcNow.AddSeconds(ttl);
+                }
+                else { _failureCacheResult = null; _failureCacheExpiry = DateTime.MinValue; }
             }
-            else { _failureCacheResult = null; _failureCacheExpiry = DateTime.MinValue; }
-            _failureCacheMissGroup?.Set();
-            _failureCacheMissGroup = null;
+            return result;
         }
-        return result;
+        finally
+        {
+            // The leader always releases and clears the miss-group, even if the platform
+            // fetch throws, so coalesced waiters are never stranded.
+            if (isLeader)
+                lock (_failureCacheLock)
+                {
+                    _failureCacheMissGroup?.Set();
+                    _failureCacheMissGroup = null;
+                }
+        }
     }
 
     private static IApproovTokenFetchResult FetchSecureStringWithFailureCache(string key, string? newDef)
