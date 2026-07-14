@@ -8,7 +8,7 @@ Replace:
 ```
 With:
 ```xml
-<PackageReference Include="Approov.Service.Maui" Version="3.5.11" />
+<PackageReference Include="Approov.Service.Maui" Version="3.5.5" />
 ```
 
 ## Namespace
@@ -21,12 +21,12 @@ The namespace remains `Approov`. No namespace change required.
 |-----|-----|
 | `ApproovService.Initialize(config)` | `ApproovService.Initialize(config, comment?)` — same signature, `comment` is optional |
 | `new ApproovHttpClient()` | `new ApproovHttpClient()` — identical |
-| User-property string `"approov-service-xamarin"` | Now `"approov-service-maui/3.5.11"` — set automatically |
+| User-property string `"approov-service-xamarin"` | Now `"approov-service-maui/3.5.5"` — set automatically |
 
-## New features in 3.5.11
+## New features in 3.5.5
 
 - `SetApproovTraceIDHeader` — propagate the Approov trace ID to a request header
-- `GetInstallMessageSignature` — per-install message signing (iOS only; returns `null` on Android)
+- `GetInstallMessageSignature` — per-install message signing (Android and iOS; returns `null` in bypass mode)
 - `SetDevKey` — developer key injection
-- HTTP message signing via `IApproovMessageSigner` (opt-in, fail-open)
+- HTTP message signing via the `ApproovDefaultMessageSigning` service mutator (opt-in, fail-open)
 - Configurable failure cache TTL (`SetFailureCacheTTL`)

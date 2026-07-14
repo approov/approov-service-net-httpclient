@@ -20,9 +20,9 @@ Please see the [MAUI HttpClient](https://github.com/approov/quickstart-maui-http
 
 - Automatic Approov token injection on every request
 - HTTP header and query parameter secret substitution
-- TLS certificate pinning via `VerifyPinning`
+- TLS certificate validation and public-key pinning (applied automatically by `ApproovMessageHandler` via `ApproovService.VerifyServerTrust`)
 - Configurable failure caching (default 5 s) for network-outage resilience
-- HTTP message signing (opt-in via `IApproovMessageSigner`)
+- HTTP message signing (opt-in via the `ApproovDefaultMessageSigning` service mutator)
 - Bypass mode (`Initialize("")`) for development environments
 
 ## Structure
