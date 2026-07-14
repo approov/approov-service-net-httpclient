@@ -143,6 +143,45 @@ public class ApproovDefaultMessageSigningTests : IDisposable
     }
 
     [Fact]
+    public void HostFactory_MatchesRequestWithExplicitPort()
+    {
+        // PutHostFactory is keyed by host name; a request to that host on a non-default
+        // port must still select the host factory (RequestUri.Host, not Authority).
+        ApproovService.Initialize("dummy-config");
+        byte[] hmac = new byte[32];
+        ApproovService.AccountSignatureResult = Convert.ToBase64String(hmac);
+
+        var signer = new ApproovDefaultMessageSigning()
+            .PutHostFactory("shapes.approov.io", MinimalFactory(account: true));
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://shapes.approov.io:8443/v5/shapes");
+        req.Headers.Add("Approov-Token", "the-token");
+        var changes = new ApproovRequestMutations { TokenHeaderKey = "Approov-Token" };
+
+        var result = signer.HandleInterceptorProcessedRequest(req, changes);
+
+        Assert.True(result.Headers.Contains("Signature"));
+        Assert.StartsWith("account=:", string.Join("", result.Headers.GetValues("Signature")));
+    }
+
+    [Fact]
+    public void DerEcdsaToRaw_RejectsTrailingDataAfterSequence()
+    {
+        var writer = new AsnWriter(AsnEncodingRules.DER);
+        using (writer.PushSequence())
+        {
+            writer.WriteInteger(new BigInteger(0x1122));
+            writer.WriteInteger(new BigInteger(0x33));
+        }
+        byte[] der = writer.Encode();
+        byte[] withTrailing = new byte[der.Length + 1];
+        Array.Copy(der, withTrailing, der.Length);
+        withTrailing[der.Length] = 0x2A; // garbage appended after the outer SEQUENCE
+
+        Assert.Throws<AsnContentException>(
+            () => ApproovDefaultMessageSigning.DerEcdsaToRaw(withTrailing));
+    }
+
+    [Fact]
     public void DerEcdsaToRaw_ConvertsDerSequenceToFixed64Bytes()
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);

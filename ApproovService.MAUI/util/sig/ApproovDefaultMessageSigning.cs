@@ -41,8 +41,8 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
         return this;
     }
 
-    private SignatureParametersFactory? SelectFactory(string authority)
-        => _hostFactories.TryGetValue(authority, out var f) ? f : _defaultFactory;
+    private SignatureParametersFactory? SelectFactory(string host)
+        => _hostFactories.TryGetValue(host, out var f) ? f : _defaultFactory;
 
     // ---- IApproovServiceMutator: delegate everything except the signing step ----
     private static IApproovServiceMutator Base => ApproovServiceMutatorDefault.Shared;
@@ -73,7 +73,7 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
         if (changes?.TokenHeaderKey == null)
             return request; // no Approov token was added, so nothing to sign
 
-        var factory = SelectFactory(request.RequestUri?.Authority ?? "");
+        var factory = SelectFactory(request.RequestUri?.Host ?? "");
         if (factory == null)
             return request;
 
@@ -139,6 +139,7 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
     {
         var reader = new AsnReader(der, AsnEncodingRules.DER);
         AsnReader seq = reader.ReadSequence();
+        reader.ThrowIfNotEmpty(); // reject trailing data after the outer SEQUENCE
         BigInteger r = seq.ReadInteger();
         BigInteger s = seq.ReadInteger();
         seq.ThrowIfNotEmpty();
