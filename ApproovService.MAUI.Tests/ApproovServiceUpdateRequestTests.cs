@@ -7,10 +7,15 @@ namespace Approov.Tests;
 [Collection("ApproovService")]
 public class ApproovServiceUpdateRequestTests : IDisposable
 {
+    public ApproovServiceUpdateRequestTests()
+    {
+        ApproovService.ResetPlatformStub();
+        ApproovService.ResetForTesting();
+    }
+
     public void Dispose()
     {
-        ApproovService.FetchCallCount = 0;
-        ApproovService.NextFetchResult = null;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 

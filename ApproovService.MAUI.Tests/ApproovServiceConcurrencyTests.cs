@@ -8,10 +8,15 @@ namespace Approov.Tests;
 [Collection("ApproovService")]
 public class ApproovServiceConcurrencyTests : IDisposable
 {
+    public ApproovServiceConcurrencyTests()
+    {
+        ApproovService.ResetPlatformStub();
+        ApproovService.ResetForTesting();
+    }
+
     public void Dispose()
     {
-        ApproovService.FetchCallCount = 0;
-        ApproovService.NextFetchResult = null;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 

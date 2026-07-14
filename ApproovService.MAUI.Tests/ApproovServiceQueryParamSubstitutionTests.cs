@@ -6,10 +6,15 @@ namespace Approov.Tests;
 [Collection("ApproovService")]
 public class ApproovServiceQueryParamSubstitutionTests : IDisposable
 {
+    public ApproovServiceQueryParamSubstitutionTests()
+    {
+        ApproovService.ResetPlatformStub();
+        ApproovService.ResetForTesting();
+    }
+
     public void Dispose()
     {
-        ApproovService.FetchCallCount = 0;
-        ApproovService.NextFetchResult = null;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 
@@ -38,5 +43,21 @@ public class ApproovServiceQueryParamSubstitutionTests : IDisposable
         var response = ApproovService.UpdateRequestWithApproov(req);
         Assert.Equal(ApproovFetchDecision.ShouldProceed, response.Decision);
         Assert.Contains("foo=bar", response.Request!.RequestUri!.Query);
+    }
+
+    [Fact]
+    public void UpdateRequest_QueryParamSubstitutionUnknownKey_LeavesValueUnchanged()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.AddSubstitutionQueryParam("api_key");
+        ApproovService.NextSecureStringResult = new StubTokenFetchResult
+            { Status = ApproovTokenFetchStatus.UnknownKey };
+        var req = new HttpRequestMessage(HttpMethod.Get,
+            "https://example.com/api?api_key=placeholder");
+
+        var response = ApproovService.UpdateRequestWithApproov(req);
+
+        Assert.Equal(ApproovFetchDecision.ShouldProceed, response.Decision);
+        Assert.Contains("api_key=placeholder", response.Request!.RequestUri!.Query);
     }
 }

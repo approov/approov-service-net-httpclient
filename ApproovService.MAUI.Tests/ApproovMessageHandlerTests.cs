@@ -9,10 +9,15 @@ namespace Approov.Tests;
 [Collection("ApproovService")]
 public class ApproovMessageHandlerTests : IDisposable
 {
+    public ApproovMessageHandlerTests()
+    {
+        ApproovService.ResetPlatformStub();
+        ApproovService.ResetForTesting();
+    }
+
     public void Dispose()
     {
-        ApproovService.FetchCallCount = 0;
-        ApproovService.NextFetchResult = null;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 
@@ -51,6 +56,7 @@ public class ApproovMessageHandlerTests : IDisposable
         var client = new HttpClient(handler);
         var response = await client.GetAsync("https://example.com");
         Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        Assert.Contains("NoNetwork", response.ReasonPhrase);
     }
 
     [Fact]
@@ -66,10 +72,33 @@ public class ApproovMessageHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task SendAsync_NotInitialized_ThrowsInitializationFailureException()
+    {
+        var inner = new FakeHandler(HttpStatusCode.OK);
+        var handler = new ApproovMessageHandler(inner);
+        var client = new HttpClient(handler);
+        await Assert.ThrowsAsync<InitializationFailureException>(
+            () => client.GetAsync("https://example.com"));
+    }
+
+    [Fact]
     public void ApproovHttpClient_DefaultCtor_UsesApproovMessageHandler()
     {
         var client = new ApproovHttpClient();
         Assert.NotNull(client);
+    }
+
+    [Fact]
+    public async Task ApproovHttpClient_CustomHandlerCtor_SendsThroughHandler()
+    {
+        ApproovService.Initialize("");
+        var inner = new FakeHandler(HttpStatusCode.Accepted);
+        var handler = new ApproovMessageHandler(inner);
+        using var client = new ApproovHttpClient(handler);
+
+        var response = await client.GetAsync("https://example.com");
+
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
     }
 
     private sealed class FakeHandler : HttpMessageHandler

@@ -48,7 +48,7 @@ public class ApproovServiceSubstitutionTests : IDisposable
         ApproovService.Initialize("");
         ApproovService.AddExclusionURLRegex("internal", @"https://internal\.example\.com/.*");
         var regexs = ApproovService.GetExclusionURLRegexs();
-        Assert.True(regexs["internal"].IsMatch("https://internal.example.com/api/v1"));
+        Assert.Matches(regexs["internal"], "https://internal.example.com/api/v1");
     }
 
     [Fact]

@@ -7,10 +7,15 @@ namespace Approov.Tests;
 [Collection("ApproovService")]
 public class ApproovServiceBindingHeaderTests : IDisposable
 {
+    public ApproovServiceBindingHeaderTests()
+    {
+        ApproovService.ResetPlatformStub();
+        ApproovService.ResetForTesting();
+    }
+
     public void Dispose()
     {
-        ApproovService.SetDataHashCallCount = 0;
-        ApproovService.LastDataHashValue = null;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 

@@ -6,11 +6,15 @@ namespace Approov.Tests;
 [Collection("ApproovService")]
 public class ApproovServiceInitTests : IDisposable
 {
+    public ApproovServiceInitTests()
+    {
+        ApproovService.ResetPlatformStub();
+        ApproovService.ResetForTesting();
+    }
+
     public void Dispose()
     {
-        ApproovService.InitCallCount = 0;
-        ApproovService.NextInitShouldThrow = false;
-        ApproovService.NextInitReturnsFalse = false;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 

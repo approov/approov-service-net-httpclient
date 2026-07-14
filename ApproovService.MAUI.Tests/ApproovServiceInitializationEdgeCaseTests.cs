@@ -9,22 +9,13 @@ public class ApproovServiceInitializationEdgeCaseTests : IDisposable
     public ApproovServiceInitializationEdgeCaseTests()
     {
         // Reset shared stub state in case a prior test class left it dirty
-        ApproovService.InitCallCount = 0;
-        ApproovService.NextInitShouldThrow = false;
-        ApproovService.NextInitReturnsFalse = false;
-        ApproovService.LastInitComment = null;
-        ApproovService.LastInitCommentWasNull = false;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 
     public void Dispose()
     {
-        ApproovService.InitCallCount = 0;
-        ApproovService.NextInitShouldThrow = false;
-        ApproovService.NextInitReturnsFalse = false;
-        ApproovService.LastInitComment = null;
-        ApproovService.LastInitCommentWasNull = false;
-        ApproovService.LastUserProperty = null;
+        ApproovService.ResetPlatformStub();
         ApproovService.ResetForTesting();
     }
 
