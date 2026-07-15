@@ -39,6 +39,26 @@ public class ApproovServiceBodyDigestTests : IDisposable
         Assert.EndsWith(":", digest);
     }
 
+    [Fact]
+    public async Task BodyDigest_ExistingHeader_IsReplacedInsteadOfDuplicated()
+    {
+        ApproovService.Initialize("");
+        var handler = new ApproovMessageHandler(new NoOpHandler());
+        using var client = new HttpClient(handler);
+        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
+        {
+            Content = new StringContent("current-body")
+        };
+        req.Content.Headers.TryAddWithoutValidation(
+            "Content-Digest", "sha-256=:c3RhbGU=:");
+
+        await client.SendAsync(req);
+
+        string[] values = req.Content.Headers.GetValues("Content-Digest").ToArray();
+        Assert.Single(values);
+        Assert.DoesNotContain("c3RhbGU=", values[0]);
+    }
+
     [Theory]
     [InlineData("PUT")]
     [InlineData("PATCH")]

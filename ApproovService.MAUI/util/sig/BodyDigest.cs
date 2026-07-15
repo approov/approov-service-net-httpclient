@@ -40,6 +40,7 @@ internal static class BodyDigest
             byte[] body = await request.Content.ReadAsByteArrayAsync();
             byte[] hash = SHA256.HashData(body);
             string encoded = System.Convert.ToBase64String(hash);
+            request.Content.Headers.Remove("Content-Digest");
             request.Content.Headers.TryAddWithoutValidation(
                 "Content-Digest", $"sha-256=:{encoded}:");
             return BodyDigestOutcome.Added;
