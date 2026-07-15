@@ -182,6 +182,62 @@ public class ApproovDefaultMessageSigningTests : IDisposable
     }
 
     [Fact]
+    public void Sha512BodyDigest_IsGeneratedAndCoveredBySignature()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.AccountSignatureResult = Convert.ToBase64String(new byte[32]);
+        var factory = MinimalFactory(account: true)
+            .SetBodyDigestConfig(ApproovDefaultMessageSigning.DIGEST_SHA512, required: true);
+        var signer = new ApproovDefaultMessageSigning().SetDefaultFactory(factory);
+        var body = "customer-production-payload";
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
+        {
+            Content = new StringContent(body)
+        };
+        request.Headers.Add("Approov-Token", "the-token");
+        var changes = new ApproovRequestMutations { TokenHeaderKey = "Approov-Token" };
+
+        var result = signer.HandleInterceptorProcessedRequest(request, changes);
+
+        string digest = string.Join("", result.Content!.Headers.GetValues("Content-Digest"));
+        string expected = Convert.ToBase64String(
+            SHA512.HashData(System.Text.Encoding.UTF8.GetBytes(body)));
+        Assert.Equal($"sha-512=:{expected}:", digest);
+        Assert.Contains("\"content-digest\"", SignatureInput(result));
+    }
+
+    [Fact]
+    public void RequiredBodyDigest_WithUnknownLength_FailsClosed()
+    {
+        ApproovService.Initialize("dummy-config");
+        var factory = MinimalFactory(account: true)
+            .SetBodyDigestConfig(ApproovDefaultMessageSigning.DIGEST_SHA256, required: true);
+        var signer = new ApproovDefaultMessageSigning().SetDefaultFactory(factory);
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
+        {
+            Content = new UnknownLengthContent()
+        };
+        request.Headers.Add("Approov-Token", "the-token");
+        var changes = new ApproovRequestMutations { TokenHeaderKey = "Approov-Token" };
+
+        Assert.Throws<InvalidOperationException>(
+            () => signer.HandleInterceptorProcessedRequest(request, changes));
+    }
+
+    private sealed class UnknownLengthContent : HttpContent
+    {
+        protected override Task SerializeToStreamAsync(
+            System.IO.Stream stream, System.Net.TransportContext? context)
+            => stream.WriteAsync(new byte[] { 1, 2, 3 }).AsTask();
+
+        protected override bool TryComputeLength(out long length)
+        {
+            length = 0;
+            return false;
+        }
+    }
+
+    [Fact]
     public void DerEcdsaToRaw_RejectsTrailingDataAfterSequence()
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);

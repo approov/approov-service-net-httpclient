@@ -15,6 +15,7 @@ using System.Collections.Generic;
 using System.Formats.Asn1;
 using System.Net.Http;
 using System.Numerics;
+using System.Security.Cryptography;
 using Approov.Util.HttpSfv;
 
 namespace Approov.Util.Sig;
@@ -261,17 +262,46 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
                 if (HasHeader(request, header))
                     p.AddComponentIdentifier(new StringItem(header.ToLowerInvariant()));
 
-            // The Content-Digest header itself is produced by the body-digest step of the
-            // message handler; here we only cover it as a component when it is present.
             if (_bodyDigestAlgorithm != null)
             {
-                if (HasHeader(request, "Content-Digest"))
+                if (TryGenerateBodyDigest(request, _bodyDigestAlgorithm))
                     p.AddComponentIdentifier(new StringItem("content-digest"));
                 else if (_bodyDigestRequired)
-                    throw new InvalidOperationException("Required Content-Digest header is missing");
+                    throw new InvalidOperationException("Failed to create required body digest");
             }
 
             return p;
+        }
+
+        private static bool TryGenerateBodyDigest(HttpRequestMessage request, string algorithm)
+        {
+            HttpContent? content = request.Content;
+            if (content?.Headers.ContentLength is not > 0) return false;
+
+            try
+            {
+                // HttpMessageContent APIs are asynchronous, while the mutator contract is
+                // synchronous. Buffering first makes the subsequent read local and keeps
+                // the request body replayable for the transport.
+                content.LoadIntoBufferAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+                byte[] body = content.ReadAsByteArrayAsync().ConfigureAwait(false)
+                    .GetAwaiter().GetResult();
+                byte[] digest = algorithm switch
+                {
+                    DIGEST_SHA256 => SHA256.HashData(body),
+                    DIGEST_SHA512 => SHA512.HashData(body),
+                    _ => throw new ArgumentException(
+                        "Unsupported body digest algorithm: " + algorithm)
+                };
+                content.Headers.Remove("Content-Digest");
+                content.Headers.TryAddWithoutValidation(
+                    "Content-Digest", SFV.SerializeDictionary(algorithm, digest));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static bool HasHeader(HttpRequestMessage request, string name)
