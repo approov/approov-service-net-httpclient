@@ -30,16 +30,26 @@ public static partial class ApproovService
         => global::Com.Criticalblue.Approovsdk.Approov.SetUserProperty(property);
 
     private static partial IApproovTokenFetchResult PlatformFetchApproovTokenAndWait(string url)
-        => new AndroidTokenFetchResult(
-            global::Com.Criticalblue.Approovsdk.Approov.FetchApproovTokenAndWait(url));
+        => RequireTokenFetchResult(
+            global::Com.Criticalblue.Approovsdk.Approov.FetchApproovTokenAndWait(url),
+            "fetching an Approov token");
 
     private static partial IApproovTokenFetchResult PlatformFetchSecureStringAndWait(string key, string? newDef)
-        => new AndroidTokenFetchResult(
-            global::Com.Criticalblue.Approovsdk.Approov.FetchSecureStringAndWait(key, newDef));
+        => RequireTokenFetchResult(
+            global::Com.Criticalblue.Approovsdk.Approov.FetchSecureStringAndWait(key, newDef),
+            "fetching a secure string");
 
     private static partial IApproovTokenFetchResult PlatformFetchCustomJWTAndWait(string payload)
-        => new AndroidTokenFetchResult(
-            global::Com.Criticalblue.Approovsdk.Approov.FetchCustomJWTAndWait(payload));
+        => RequireTokenFetchResult(
+            global::Com.Criticalblue.Approovsdk.Approov.FetchCustomJWTAndWait(payload),
+            "fetching a custom JWT");
+
+    private static AndroidTokenFetchResult RequireTokenFetchResult(
+        global::Com.Criticalblue.Approovsdk.Approov.TokenFetchResult? result,
+        string operation)
+        => result == null
+            ? throw new PermanentException($"Approov SDK returned no result while {operation}")
+            : new AndroidTokenFetchResult(result);
 
     private static partial void PlatformSetDataHashInToken(string data)
         => global::Com.Criticalblue.Approovsdk.Approov.SetDataHashInToken(data);
