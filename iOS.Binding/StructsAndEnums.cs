@@ -1,7 +1,10 @@
+using ObjCRuntime;
+
 namespace ApproovSDK
 {
     // Must match the native NS_ENUM(NSUInteger, ApproovTokenFetchStatus) in Approov.framework/Headers/Approov.h
-    public enum ApproovTokenFetchStatus : long
+    [Native]
+    public enum ApproovTokenFetchStatus : ulong
     {
         Success = 0,
         NoNetwork = 1,
