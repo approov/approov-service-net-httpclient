@@ -8,12 +8,16 @@
     <Description>Approov service layer for .NET MAUI (Android + iOS)</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://approov.io</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>Approov API-Protection Security Mobile MAUI Android iOS</PackageTags>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <SupportedOSPlatformVersion Condition="$(TargetFramework.Contains('-android'))">23.0</SupportedOSPlatformVersion>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
   <ItemGroup Condition="$(TargetFramework.Contains('-android'))">
     <AndroidLibrary Include="../libs/approov.aar" />
     <!-- The Approov Android SDK requires okhttp3 at runtime (see approov-service-okhttp build.gradle) -->
