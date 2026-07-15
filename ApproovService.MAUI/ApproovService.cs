@@ -236,6 +236,9 @@ public static partial class ApproovService
 
     public static void SetFailureCacheTTL(double seconds)
     {
+        if (!double.IsFinite(seconds) || seconds < 0)
+            throw new ArgumentOutOfRangeException(nameof(seconds),
+                "Failure cache TTL must be a finite, non-negative number of seconds");
         lock (_stateLock) { _failureCacheTTL = seconds; }
     }
 

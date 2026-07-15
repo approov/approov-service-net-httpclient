@@ -63,6 +63,19 @@ public class ApproovServiceFailureCacheTests : IDisposable
         Assert.Equal(2, ApproovService.FetchCallCount);
     }
 
+    [Theory]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void FailureCache_InvalidTtl_IsRejectedAtConfigurationTime(double seconds)
+    {
+        var exception = Assert.Throws<ArgumentOutOfRangeException>(
+            () => ApproovService.SetFailureCacheTTL(seconds));
+
+        Assert.Equal("seconds", exception.ParamName);
+    }
+
     [Fact]
     public async Task FailureCache_PlatformFetchThrows_DoesNotStrandNextCaller()
     {
