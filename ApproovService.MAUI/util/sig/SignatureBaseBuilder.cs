@@ -14,11 +14,9 @@ public static class SignatureBaseBuilder
         // Append component identifier lines: "<id>": <value>\n
         foreach (var item in componentIdentifiers)
         {
-            string value = provider.GetComponentValue(item.Value);
-            sb.Append('"');
-            sb.Append(item.Value);
-            sb.Append("\": ");
-            sb.Append(value);
+            sb.Append(SFV.SerializeStringItem(item));
+            sb.Append(": ");
+            sb.Append(provider.GetComponentValue(item.Value));
             sb.Append('\n');
         }
 
@@ -33,15 +31,7 @@ public static class SignatureBaseBuilder
             paramsStr.Append(';');
             paramsStr.Append(key);
             paramsStr.Append('=');
-            // Integers are serialized without quotes; strings with quotes
-            if (val is long || val is int)
-                paramsStr.Append(val);
-            else
-            {
-                paramsStr.Append('"');
-                paramsStr.Append(val);
-                paramsStr.Append('"');
-            }
+            paramsStr.Append(SFV.SerializeBareItem(val));
         }
 
         sb.Append("\"@signature-params\": ");
@@ -61,14 +51,7 @@ public static class SignatureBaseBuilder
             paramsStr.Append(';');
             paramsStr.Append(key);
             paramsStr.Append('=');
-            if (val is long || val is int)
-                paramsStr.Append(val);
-            else
-            {
-                paramsStr.Append('"');
-                paramsStr.Append(val);
-                paramsStr.Append('"');
-            }
+            paramsStr.Append(SFV.SerializeBareItem(val));
         }
         return sfvInnerList.ToString() + paramsStr.ToString();
     }

@@ -9,7 +9,12 @@ public class SignatureParameters
 
     public void AddComponentIdentifier(StringItem item) => _componentIdentifiers.Add(item);
 
-    public void AddParameter(string key, object value) => _parameters.Add((key, value));
+    public void AddParameter(string key, object value)
+    {
+        int existing = _parameters.FindIndex(parameter => parameter.Key == key);
+        if (existing >= 0) _parameters[existing] = (key, value);
+        else _parameters.Add((key, value));
+    }
 
     public object? GetParameterValue(string key)
     {

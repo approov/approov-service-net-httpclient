@@ -7,16 +7,39 @@ public static class SFV
     public static string SerializeStringItem(StringItem item)
     {
         var sb = new StringBuilder();
-        sb.Append('"');
-        sb.Append(item.Value);
-        sb.Append('"');
+        sb.Append(SerializeBareItem(item.Value));
         foreach (var (key, val) in item.Parameters)
         {
             sb.Append(';');
             sb.Append(key);
-            sb.Append("=\"");
-            sb.Append(val);
-            sb.Append('"');
+            sb.Append('=');
+            sb.Append(SerializeBareItem(val));
+        }
+        return sb.ToString();
+    }
+
+    public static string SerializeBareItem(object value) => value switch
+    {
+        string text => $"\"{EscapeString(text)}\"",
+        int integer => integer.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        long integer => integer.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        bool boolean => boolean ? "?1" : "?0",
+        _ => throw new ArgumentException(
+            $"Unsupported Structured Field value type: {value?.GetType().Name ?? "null"}",
+            nameof(value))
+    };
+
+    private static string EscapeString(string value)
+    {
+        var sb = new StringBuilder(value.Length);
+        foreach (char c in value)
+        {
+            if (c < 0x20 || c > 0x7e)
+                throw new ArgumentException(
+                    "Structured Field strings must contain printable ASCII characters",
+                    nameof(value));
+            if (c is '"' or '\\') sb.Append('\\');
+            sb.Append(c);
         }
         return sb.ToString();
     }

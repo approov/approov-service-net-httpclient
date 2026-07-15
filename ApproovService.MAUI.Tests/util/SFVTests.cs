@@ -57,6 +57,15 @@ public class SFVTests
             SFV.SerializeInnerList(items));
     }
 
+    [Fact]
+    public void StringItem_QuotesAndBackslashes_AreEscaped()
+    {
+        var item = new StringItem("a\"b\\c", new[] { ("name", "d\"e\\f") });
+
+        Assert.Equal("\"a\\\"b\\\\c\";name=\"d\\\"e\\\\f\"",
+            SFV.SerializeStringItem(item));
+    }
+
     // --- SerializeDictionary(key, byte[]) ---
 
     [Fact]

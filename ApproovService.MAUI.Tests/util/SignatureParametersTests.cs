@@ -40,4 +40,15 @@ public class SignatureParametersTests
         Assert.Equal("@path", inner[1].Value);
         Assert.Equal("@authority", inner[2].Value);
     }
+
+    [Fact]
+    public void AddParameter_DuplicateKey_ReplacesExistingValue()
+    {
+        var sp = new SignatureParameters();
+        sp.AddParameter("alg", "old");
+        sp.AddParameter("alg", "new");
+
+        Assert.Equal("new", sp.GetParameterValue("alg"));
+        Assert.Single(sp.GetParameters());
+    }
 }

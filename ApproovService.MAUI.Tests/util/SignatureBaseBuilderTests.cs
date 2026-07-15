@@ -39,4 +39,24 @@ public class SignatureBaseBuilderTests
         var lines = sigBase.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         Assert.StartsWith("\"@signature-params\":", lines[^1]);
     }
+
+    [Fact]
+    public void Build_ComponentParameters_AppearInIdentifierLineAndTrailer()
+    {
+        var sp = new SignatureParameters();
+        sp.AddComponentIdentifier(new StringItem("@query-param", new[] { ("name", "Pet") }));
+        var provider = new FixedProvider("dog");
+
+        string sigBase = SignatureBaseBuilder.Build(sp, provider);
+
+        Assert.Equal(
+            "\"@query-param\";name=\"Pet\": dog\n" +
+            "\"@signature-params\": (\"@query-param\";name=\"Pet\")",
+            sigBase);
+    }
+
+    private sealed class FixedProvider(string value) : IComponentProvider
+    {
+        public string GetComponentValue(string identifier) => value;
+    }
 }
