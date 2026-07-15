@@ -26,6 +26,9 @@ public static partial class ApproovService
     // New: data-hash tracking (for binding header tests)
     internal static int SetDataHashCallCount = 0;
     internal static string? LastDataHashValue = null;
+    internal static bool BlockTokenFetch = false;
+    internal static ManualResetEventSlim TokenFetchStarted = new(false);
+    internal static ManualResetEventSlim ReleaseTokenFetch = new(false);
 
     // New: secure-string result override (for substitution edge-case tests)
     internal static StubTokenFetchResult? NextSecureStringResult = null;
@@ -70,6 +73,9 @@ public static partial class ApproovService
         LastUserProperty = null;
         SetDataHashCallCount = 0;
         LastDataHashValue = null;
+        BlockTokenFetch = false;
+        TokenFetchStarted.Reset();
+        ReleaseTokenFetch.Set();
         NextSecureStringResult = null;
         SecureStringCallCount = 0;
         LastSecureStringKey = null;
@@ -119,6 +125,8 @@ public static partial class ApproovService
     {
         FetchCallCount++;
         LastFetchUrl = url;
+        TokenFetchStarted.Set();
+        if (BlockTokenFetch) ReleaseTokenFetch.Wait();
         if (NextFetchException != null) { var e = NextFetchException; NextFetchException = null; throw e; }
         if (NextFetchResult != null) { var r = NextFetchResult; NextFetchResult = null; return r; }
         return new StubTokenFetchResult { Status = ApproovTokenFetchStatus.Success, Token = "stub-token" };

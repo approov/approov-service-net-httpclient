@@ -12,6 +12,7 @@ public static partial class ApproovService
     private static readonly object _stateLock = new();
     private static readonly object _loggingLock = new();
     private static readonly object _failureCacheLock = new();
+    private static readonly object _bindingFetchLock = new();
 
     // Initialization state. These flags are written under _initLock but read lock-free on
     // hot paths (EnsureInitialized, UpdateRequestWithApproov, VerifyPinning); volatile gives
@@ -427,17 +428,33 @@ public static partial class ApproovService
 
             string url = request.RequestUri?.AbsoluteUri ?? "";
 
-            // Binding header: hash its value into the token
+            // Binding data is persistent global SDK state. Validate the configured header
+            // and keep setting its value atomic with the associated token fetch so that
+            // concurrent requests cannot receive tokens bound to each other's data.
             string? bindingHeader;
             lock (_stateLock) { bindingHeader = _bindingHeader; }
-            if (bindingHeader != null
-                && request.Headers.TryGetValues(bindingHeader, out var bindingValues))
+            IApproovTokenFetchResult tokenResult;
+            if (bindingHeader != null)
             {
-                PlatformSetDataHashInToken(string.Join(",", bindingValues));
-            }
+                if (!request.Headers.TryGetValues(bindingHeader, out var bindingValues))
+                    throw new ConfigurationFailureException(
+                        $"Binding header '{bindingHeader}' is missing from the request");
 
-            // Fetch the Approov token via failure cache
-            var tokenResult = FetchApproovTokenWithFailureCache(url);
+                string[] values = bindingValues.ToArray();
+                if (values.Length != 1)
+                    throw new ConfigurationFailureException(
+                        $"Binding header '{bindingHeader}' must contain exactly one value");
+
+                lock (_bindingFetchLock)
+                {
+                    PlatformSetDataHashInToken(values[0]);
+                    tokenResult = FetchApproovTokenWithFailureCache(url);
+                }
+            }
+            else
+            {
+                tokenResult = FetchApproovTokenWithFailureCache(url);
+            }
 
             string tokenHeader, tokenPrefix;
             lock (_stateLock) { tokenHeader = _approovTokenHeader; tokenPrefix = _approovTokenPrefix; }
