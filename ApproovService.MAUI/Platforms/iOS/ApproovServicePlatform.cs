@@ -76,7 +76,23 @@ internal sealed class iOSTokenFetchResult : IApproovTokenFetchResult
     private readonly ApproovSDK.ApproovTokenFetchResult _r;
     internal iOSTokenFetchResult(ApproovSDK.ApproovTokenFetchResult r) => _r = r;
 
-    public ApproovTokenFetchStatus Status => (ApproovTokenFetchStatus)(int)_r.Status();
+    public ApproovTokenFetchStatus Status => _r.Status() switch
+    {
+        ApproovSDK.ApproovTokenFetchStatus.Success => ApproovTokenFetchStatus.Success,
+        ApproovSDK.ApproovTokenFetchStatus.NoNetwork => ApproovTokenFetchStatus.NoNetwork,
+        ApproovSDK.ApproovTokenFetchStatus.MitmDetected => ApproovTokenFetchStatus.MitmDetected,
+        ApproovSDK.ApproovTokenFetchStatus.PoorNetwork => ApproovTokenFetchStatus.PoorNetwork,
+        ApproovSDK.ApproovTokenFetchStatus.NoApproovService => ApproovTokenFetchStatus.NoApproovService,
+        ApproovSDK.ApproovTokenFetchStatus.UnknownUrl => ApproovTokenFetchStatus.UnknownUrl,
+        ApproovSDK.ApproovTokenFetchStatus.UnprotectedUrl => ApproovTokenFetchStatus.UnprotectedUrl,
+        ApproovSDK.ApproovTokenFetchStatus.Rejected => ApproovTokenFetchStatus.Rejected,
+        ApproovSDK.ApproovTokenFetchStatus.Disabled => ApproovTokenFetchStatus.Disabled,
+        ApproovSDK.ApproovTokenFetchStatus.UnknownKey => ApproovTokenFetchStatus.UnknownKey,
+        ApproovSDK.ApproovTokenFetchStatus.BadPayload => ApproovTokenFetchStatus.BadPayload,
+        // BadUrl, NotInitialized and BadKey have no service-layer equivalent and must
+        // fail closed rather than being mistaken for a proceed-without-token status.
+        _ => ApproovTokenFetchStatus.InternalError
+    };
     public string Token => _r.Token() ?? "";
     public string? SecureString => _r.SecureString();
     public string ARC => _r.ARC() ?? "";
