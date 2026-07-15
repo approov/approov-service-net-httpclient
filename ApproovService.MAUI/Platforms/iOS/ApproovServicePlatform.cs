@@ -42,7 +42,7 @@ public static partial class ApproovService
         => ApproovNative.DeviceID();
 
     private static partial string? PlatformGetAccountMessageSignature(string message)
-        => ApproovNative.GetMessageSignature(message);
+        => ApproovNative.GetAccountMessageSignature(message);
 
     private static partial string? PlatformGetInstallMessageSignature(string message)
         => ApproovNative.GetInstallMessageSignature(message);

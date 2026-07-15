@@ -144,6 +144,12 @@ namespace ApproovSDK
         [return: NullAllowed]
         string GetMessageSignature(string message);
 
+        // +(NSString * _Nullable)getAccountMessageSignature:(NSString * _Nonnull)message;
+        [Static]
+        [Export("getAccountMessageSignature:")]
+        [return: NullAllowed]
+        string GetAccountMessageSignature(string message);
+
         // +(void)setDevKey:(NSString * _Nonnull)devKey;
         [Static]
         [Export("setDevKey:")]
