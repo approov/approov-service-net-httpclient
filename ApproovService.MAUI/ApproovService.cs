@@ -578,9 +578,19 @@ public static partial class ApproovService
         // name/expiry failure it reported must reject the connection before pinning.
         if (sslPolicyErrors != SslPolicyErrors.None) return false;
         if (serverCert == null || chain == null) return false;
-        var chainCertificates = new List<X509Certificate2>(chain.ChainElements.Count);
-        foreach (var element in chain.ChainElements)
-            chainCertificates.Add(element.Certificate);
+        var chainCertificates = new List<X509Certificate2>(
+            Math.Max(1, chain.ChainElements.Count));
+        if (chain.ChainElements.Count == 0)
+        {
+            // Some MAUI/iOS runtime versions report a valid TLS result with an empty
+            // callback chain. The leaf is still available and must remain pinnable.
+            chainCertificates.Add(serverCert);
+        }
+        else
+        {
+            foreach (var element in chain.ChainElements)
+                chainCertificates.Add(element.Certificate);
+        }
         return VerifyPinning(request, chainCertificates);
     }
 
