@@ -106,5 +106,5 @@ internal sealed class AndroidTokenFetchResult : IApproovTokenFetchResult
     public bool IsConfigChanged => _r.IsConfigChanged;
     public bool IsForceApplyPins => _r.IsForceApplyPins;
     public string LoggableToken => _r.LoggableToken ?? "";
-    public string? TraceID => null;
+    public string? TraceID => _r.TraceID;
 }
