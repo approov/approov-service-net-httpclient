@@ -41,13 +41,17 @@ public class ApproovServiceTlsPinningTests : IDisposable
     }
 
     [Fact]
-    public void VerifyPinning_Initialized_NoPinsJson_ReturnsTrue()
+    public void VerifyPinning_Initialized_NoPinsJson_FailsClosed()
     {
-        // PlatformGetPinsJSON stub returns null — all pins pass
         ApproovService.Initialize("dummy-config");
         var cert = CreateSelfSignedCert();
         var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
-        Assert.True(ApproovService.VerifyPinning(req, new[] { cert }));
+
+        ApproovService.PinsJson = null;
+        Assert.False(ApproovService.VerifyPinning(req, new[] { cert }));
+
+        ApproovService.PinsJson = "";
+        Assert.False(ApproovService.VerifyPinning(req, new[] { cert }));
         Assert.Equal("public-key-sha256", ApproovService.LastPinType);
     }
 

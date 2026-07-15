@@ -603,7 +603,10 @@ public static partial class ApproovService
         if (!mutator.HandlePinningShouldProcessRequest(request)) return true;
 
         string? pinsJson = PlatformGetPinsJSON("public-key-sha256");
-        if (string.IsNullOrEmpty(pinsJson)) return true;
+        // Once the service is initialized, the SDK should always return a JSON pin set.
+        // A null/empty result indicates an SDK/state failure; accepting it would silently
+        // disable Approov pinning for every host.
+        if (string.IsNullOrEmpty(pinsJson)) return false;
 
         string host = request.RequestUri?.Host ?? "";
         if (string.IsNullOrEmpty(host)) return true;
