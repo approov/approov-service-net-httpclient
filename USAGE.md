@@ -175,15 +175,10 @@ Body digest is computed asynchronously in `ApproovMessageHandler.SendAsync` befo
 
 `ApproovMessageHandler` wires TLS pinning automatically via `ServerCertificateCustomValidationCallback`. The pins are managed by the Approov cloud and updated dynamically — no app update required when pins rotate.
 
-If you build a custom `HttpMessageHandler`, call `ApproovService.VerifyPinning` from your certificate validation callback:
+If you build a custom `HttpMessageHandler`, use `ApproovService.VerifyServerTrust` as its certificate validation callback:
 
 ```csharp
-handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) =>
-{
-    if (cert == null) return false;
-    using var x509 = new X509Certificate2(cert.RawData);
-    return ApproovService.VerifyPinning(message, x509);
-};
+handler.ServerCertificateCustomValidationCallback = ApproovService.VerifyServerTrust;
 ```
 
 ## Failure Cache

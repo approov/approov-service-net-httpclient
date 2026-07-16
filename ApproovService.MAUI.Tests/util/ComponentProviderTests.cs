@@ -78,6 +78,28 @@ public class ComponentProviderTests
     }
 
     [Fact]
+    public void GetComponentValue_ContentType_FallsBackToContentHeaders()
+    {
+        var req = MakeRequest("https://example.com/path");
+        req.Content = new StringContent("body", System.Text.Encoding.UTF8, "application/json");
+        var provider = new ApproovHttpMessageComponentProvider(req);
+
+        Assert.Equal("application/json; charset=utf-8",
+            provider.GetComponentValue("content-type"));
+    }
+
+    [Fact]
+    public void GetComponentValue_ContentLength_FallsBackToContentHeaders()
+    {
+        var req = MakeRequest("https://example.com/path");
+        req.Content = new ByteArrayContent(new byte[] { 1, 2, 3 });
+        req.Content.Headers.ContentLength = 3;
+        var provider = new ApproovHttpMessageComponentProvider(req);
+
+        Assert.Equal("3", provider.GetComponentValue("content-length"));
+    }
+
+    [Fact]
     public void GetComponentValue_UnknownHeader_ThrowsInvalidOperation()
     {
         var req = MakeRequest("https://example.com/path");

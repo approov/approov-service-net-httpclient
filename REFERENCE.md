@@ -53,7 +53,8 @@
 |------|-------------|
 | `ApproovHttpClient` | `HttpClient` subclass wired to `ApproovMessageHandler`. |
 | `ApproovMessageHandler` | `DelegatingHandler` calling `UpdateRequestWithApproov`. |
-| `ApproovService.VerifyPinning(request, cert)` | TLS pinning callback for `ServerCertificateCustomValidationCallback`. |
+| `ApproovService.VerifyServerTrust(request, serverCert, chain, sslPolicyErrors)` | TLS validation and pinning callback for `ServerCertificateCustomValidationCallback`. |
+| `ApproovService.VerifyPinning(request, chainCertificates)` | Applies Approov pinning to an `IReadOnlyList<X509Certificate2>` certificate chain. |
 | `ApproovService.UpdateRequestWithApproov(request)` | Core request mutation; returns `ApproovUpdateResponse`. |
 
 ## Message signing

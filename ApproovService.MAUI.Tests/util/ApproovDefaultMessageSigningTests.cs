@@ -207,6 +207,29 @@ public class ApproovDefaultMessageSigningTests : IDisposable
     }
 
     [Fact]
+    public void RequiredBodyDigest_WithEmptyContent_IsGeneratedAndCoveredBySignature()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.AccountSignatureResult = Convert.ToBase64String(new byte[32]);
+        var factory = MinimalFactory(account: true)
+            .SetBodyDigestConfig(ApproovDefaultMessageSigning.DIGEST_SHA256, required: true);
+        var signer = new ApproovDefaultMessageSigning().SetDefaultFactory(factory);
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
+        {
+            Content = new StringContent("")
+        };
+        request.Headers.Add("Approov-Token", "the-token");
+        var changes = new ApproovRequestMutations { TokenHeaderKey = "Approov-Token" };
+
+        var result = signer.HandleInterceptorProcessedRequest(request, changes);
+
+        string digest = string.Join("", result.Content!.Headers.GetValues("Content-Digest"));
+        string expected = Convert.ToBase64String(SHA256.HashData(Array.Empty<byte>()));
+        Assert.Equal($"sha-256=:{expected}:", digest);
+        Assert.Contains("\"content-digest\"", SignatureInput(result));
+    }
+
+    [Fact]
     public void RequiredBodyDigest_WithUnknownLength_FailsClosed()
     {
         ApproovService.Initialize("dummy-config");

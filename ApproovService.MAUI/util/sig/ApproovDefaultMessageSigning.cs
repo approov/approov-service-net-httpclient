@@ -276,7 +276,7 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
         private static bool TryGenerateBodyDigest(HttpRequestMessage request, string algorithm)
         {
             HttpContent? content = request.Content;
-            if (content?.Headers.ContentLength is not > 0) return false;
+            if (content?.Headers.ContentLength == null) return false;
 
             try
             {

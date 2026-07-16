@@ -50,10 +50,22 @@ public class ApproovHttpMessageComponentProvider : IComponentProvider
 
     private string GetHeaderValue(string header)
     {
-        if (_request.Headers.TryGetValues(header, out var values))
+        if (TryGetValues(_request.Headers, header, out var values))
             return string.Join(", ", values);
-        if (_request.Content?.Headers.TryGetValues(header, out var contentValues) == true)
+        if (_request.Content != null
+            && TryGetValues(_request.Content.Headers, header, out var contentValues))
             return string.Join(", ", contentValues);
         throw new InvalidOperationException($"Header not found: {header}");
+    }
+
+    private static bool TryGetValues(System.Net.Http.Headers.HttpHeaders headers,
+        string name, out IEnumerable<string> values)
+    {
+        try { return headers.TryGetValues(name, out values!); }
+        catch (InvalidOperationException)
+        {
+            values = Array.Empty<string>();
+            return false;
+        }
     }
 }
