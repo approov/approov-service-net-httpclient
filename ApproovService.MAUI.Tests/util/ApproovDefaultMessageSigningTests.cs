@@ -164,6 +164,24 @@ public class ApproovDefaultMessageSigningTests : IDisposable
     }
 
     [Fact]
+    public void HostFactory_MatchesHostnameIgnoringCase()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.AccountSignatureResult = Convert.ToBase64String(new byte[32]);
+
+        var signer = new ApproovDefaultMessageSigning()
+            .PutHostFactory("SHAPES.APPROOV.IO", MinimalFactory(account: true));
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://shapes.approov.io/v5/shapes");
+        req.Headers.Add("Approov-Token", "the-token");
+        var changes = new ApproovRequestMutations { TokenHeaderKey = "Approov-Token" };
+
+        var result = signer.HandleInterceptorProcessedRequest(req, changes);
+
+        Assert.True(result.Headers.Contains("Signature"));
+        Assert.StartsWith("account=:", string.Join("", result.Headers.GetValues("Signature")));
+    }
+
+    [Fact]
     public void DerEcdsaToRaw_RejectsTrailingDataAfterSequence()
     {
         var writer = new AsnWriter(AsnEncodingRules.DER);

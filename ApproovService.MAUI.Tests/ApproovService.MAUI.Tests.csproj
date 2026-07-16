@@ -20,5 +20,11 @@
          and build outputs (obj/ contains generated Android binding sources after a platform build) -->
     <Compile Include="../ApproovService.MAUI/**/*.cs"
              Exclude="../ApproovService.MAUI/Platforms/**/*.cs;../ApproovService.MAUI/obj/**/*.cs;../ApproovService.MAUI/bin/**/*.cs" />
+    <!-- The iOS status mapper has no platform runtime dependencies, so link it with the
+         binding enum to exercise every native-to-service status mapping on the host. -->
+    <Compile Include="../ApproovService.MAUI/Platforms/iOS/IOSTokenFetchStatusMapper.cs"
+             Link="Platforms/iOS/IOSTokenFetchStatusMapper.cs" />
+    <Compile Include="../iOS.Binding/StructsAndEnums.cs"
+             Link="Platforms/iOS/StructsAndEnums.cs" />
   </ItemGroup>
 </Project>

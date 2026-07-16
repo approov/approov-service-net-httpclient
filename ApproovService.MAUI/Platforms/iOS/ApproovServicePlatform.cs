@@ -42,7 +42,7 @@ public static partial class ApproovService
         => ApproovNative.DeviceID();
 
     private static partial string? PlatformGetAccountMessageSignature(string message)
-        => ApproovNative.GetMessageSignature(message);
+        => ApproovNative.GetAccountMessageSignature(message);
 
     private static partial string? PlatformGetInstallMessageSignature(string message)
         => ApproovNative.GetInstallMessageSignature(message);
@@ -76,7 +76,7 @@ internal sealed class iOSTokenFetchResult : IApproovTokenFetchResult
     private readonly ApproovSDK.ApproovTokenFetchResult _r;
     internal iOSTokenFetchResult(ApproovSDK.ApproovTokenFetchResult r) => _r = r;
 
-    public ApproovTokenFetchStatus Status => (ApproovTokenFetchStatus)(int)_r.Status();
+    public ApproovTokenFetchStatus Status => IOSTokenFetchStatusMapper.Map(_r.Status());
     public string Token => _r.Token() ?? "";
     public string? SecureString => _r.SecureString();
     public string ARC => _r.ARC() ?? "";

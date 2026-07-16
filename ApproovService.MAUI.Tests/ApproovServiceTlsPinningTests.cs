@@ -182,6 +182,20 @@ public class ApproovServiceTlsPinningTests : IDisposable
     }
 
     [Fact]
+    public void VerifyServerTrust_EmptyChain_UsesLeafCertificateForPinning()
+    {
+        ApproovService.Initialize("dummy-config");
+        var cert = CreateSelfSignedCert();
+        ApproovService.PinsJson = $"{{\"example.com\":[\"{PinForCert(cert)}\"]}}";
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
+        using var emptyChain = new X509Chain();
+
+        Assert.Empty(emptyChain.ChainElements);
+        Assert.True(ApproovService.VerifyServerTrust(
+            req, cert, emptyChain, SslPolicyErrors.None));
+    }
+
+    [Fact]
     public void VerifyServerTrust_NullCertOrChain_ReturnsFalse()
     {
         var cert = CreateSelfSignedCert();

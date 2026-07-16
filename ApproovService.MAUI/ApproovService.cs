@@ -578,9 +578,12 @@ public static partial class ApproovService
         // name/expiry failure it reported must reject the connection before pinning.
         if (sslPolicyErrors != SslPolicyErrors.None) return false;
         if (serverCert == null || chain == null) return false;
-        var chainCertificates = new List<X509Certificate2>(chain.ChainElements.Count);
+        var chainCertificates = new List<X509Certificate2>(
+            Math.Max(chain.ChainElements.Count, 1));
         foreach (var element in chain.ChainElements)
             chainCertificates.Add(element.Certificate);
+        if (chainCertificates.Count == 0)
+            chainCertificates.Add(serverCert);
         return VerifyPinning(request, chainCertificates);
     }
 

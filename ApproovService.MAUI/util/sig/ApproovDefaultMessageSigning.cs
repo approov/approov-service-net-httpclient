@@ -27,7 +27,8 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
     public const string ALG_HS256 = "hmac-sha256";       // account signing key
 
     private SignatureParametersFactory? _defaultFactory;
-    private readonly Dictionary<string, SignatureParametersFactory> _hostFactories = new();
+    private readonly Dictionary<string, SignatureParametersFactory> _hostFactories =
+        new(StringComparer.OrdinalIgnoreCase);
 
     public ApproovDefaultMessageSigning SetDefaultFactory(SignatureParametersFactory factory)
     {
