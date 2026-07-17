@@ -98,7 +98,7 @@ public class ApproovServiceFailureCacheTests : IDisposable
     }
 
     [Fact]
-    public void FailureCache_SecureStringNetworkFailure_ReusedByNextTokenFetch()
+    public void FailureCache_SecureStringNetworkFailure_IsNotReusedByTokenFetch()
     {
         ApproovService.Initialize("dummy-config");
         ApproovService.SetFailureCacheTTL(5);
@@ -109,14 +109,61 @@ public class ApproovServiceFailureCacheTests : IDisposable
         req1.Headers.Add("X-Api-Key", "placeholder");
 
         var response1 = ApproovService.UpdateRequestWithApproov(req1);
-        Assert.Equal(ApproovFetchDecision.ShouldRetry, response1.Decision);
+        Assert.Equal(ApproovFetchDecision.ShouldProceed, response1.Decision);
         Assert.Equal(1, ApproovService.FetchCallCount);
         Assert.Equal(1, ApproovService.SecureStringCallCount);
 
         var req2 = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
         var response2 = ApproovService.UpdateRequestWithApproov(req2);
-        Assert.Equal(ApproovFetchDecision.ShouldRetry, response2.Decision);
-        Assert.Equal(1, ApproovService.FetchCallCount);
+        Assert.Equal(ApproovFetchDecision.ShouldProceed, response2.Decision);
+        Assert.Equal(2, ApproovService.FetchCallCount);
         Assert.Equal(1, ApproovService.SecureStringCallCount);
+    }
+
+    [Fact]
+    public void FailureCache_TokenFailure_IsScopedToRequestUrl()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.SetFailureCacheTTL(5);
+        ApproovService.NextFetchResult = new StubTokenFetchResult
+            { Status = ApproovTokenFetchStatus.NoNetwork, Token = "" };
+
+        var first = ApproovService.UpdateRequestWithApproov(
+            new HttpRequestMessage(HttpMethod.Get, "https://one.example/api"));
+        var second = ApproovService.UpdateRequestWithApproov(
+            new HttpRequestMessage(HttpMethod.Get, "https://two.example/api"));
+        var firstAgain = ApproovService.UpdateRequestWithApproov(
+            new HttpRequestMessage(HttpMethod.Get, "https://one.example/api"));
+
+        Assert.Equal(ApproovFetchDecision.ShouldRetry, first.Decision);
+        Assert.Equal(ApproovFetchDecision.ShouldProceed, second.Decision);
+        Assert.Equal(ApproovFetchDecision.ShouldRetry, firstAgain.Decision);
+        Assert.Equal(2, ApproovService.FetchCallCount);
+    }
+
+    [Fact]
+    public void FailureCache_SecureStringFailure_IsScopedToLookupKey()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.SetFailureCacheTTL(5);
+        ApproovService.AddSubstitutionHeader("X-Api-Key", null);
+        ApproovService.NextSecureStringResult = new StubTokenFetchResult
+            { Status = ApproovTokenFetchStatus.NoNetwork };
+
+        var firstRequest = new HttpRequestMessage(HttpMethod.Get, "https://example.com/one");
+        firstRequest.Headers.Add("X-Api-Key", "first-key");
+        var first = ApproovService.UpdateRequestWithApproov(firstRequest);
+
+        var secondRequest = new HttpRequestMessage(HttpMethod.Get, "https://example.com/two");
+        secondRequest.Headers.Add("X-Api-Key", "second-key");
+        var second = ApproovService.UpdateRequestWithApproov(secondRequest);
+
+        Assert.Equal(ApproovFetchDecision.ShouldProceed, first.Decision);
+        Assert.Equal("first-key",
+            string.Join("", first.Request!.Headers.GetValues("X-Api-Key")));
+        Assert.Equal(ApproovFetchDecision.ShouldProceed, second.Decision);
+        Assert.Equal("stub-secret",
+            string.Join("", second.Request!.Headers.GetValues("X-Api-Key")));
+        Assert.Equal(2, ApproovService.SecureStringCallCount);
     }
 }

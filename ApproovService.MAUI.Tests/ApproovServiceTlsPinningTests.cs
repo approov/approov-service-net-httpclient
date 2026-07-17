@@ -80,6 +80,47 @@ public class ApproovServiceTlsPinningTests : IDisposable
     }
 
     [Fact]
+    public void VerifyPinning_SingleLabelWildcard_MatchesOneSubdomainLabel()
+    {
+        ApproovService.Initialize("dummy-config");
+        var cert = CreateSelfSignedCert();
+        ApproovService.PinsJson = $"{{\"*.example.com\":[\"{PinForCert(cert)}\"]}}";
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com");
+
+        Assert.True(ApproovService.VerifyPinning(req, new[] { cert }));
+
+        ApproovService.PinsJson = "{\"*.example.com\":[\"mismatched-pin\"]}";
+        Assert.False(ApproovService.VerifyPinning(req, new[] { cert }));
+    }
+
+    [Theory]
+    [InlineData("https://example.com")]
+    [InlineData("https://deep.api.example.com")]
+    public void VerifyPinning_SingleLabelWildcard_DoesNotMatchApexOrNestedHost(string url)
+    {
+        ApproovService.Initialize("dummy-config");
+        var cert = CreateSelfSignedCert();
+        ApproovService.PinsJson = "{\"*.example.com\":[\"mismatched-pin\"]}";
+        var req = new HttpRequestMessage(HttpMethod.Get, url);
+
+        Assert.True(ApproovService.VerifyPinning(req, new[] { cert }));
+    }
+
+    [Theory]
+    [InlineData("https://example.com")]
+    [InlineData("https://api.example.com")]
+    [InlineData("https://deep.api.example.com")]
+    public void VerifyPinning_MultiLabelWildcard_MatchesApexAndAnySubdomain(string url)
+    {
+        ApproovService.Initialize("dummy-config");
+        var cert = CreateSelfSignedCert();
+        ApproovService.PinsJson = "{\"**.example.com\":[\"mismatched-pin\"]}";
+        var req = new HttpRequestMessage(HttpMethod.Get, url);
+
+        Assert.False(ApproovService.VerifyPinning(req, new[] { cert }));
+    }
+
+    [Fact]
     public void VerifyPinning_MismatchedPin_ReturnsFalse()
     {
         ApproovService.Initialize("dummy-config");
@@ -114,6 +155,20 @@ public class ApproovServiceTlsPinningTests : IDisposable
 
         Assert.True(ApproovService.VerifyPinning(req, new[] { cert }));
         Assert.Null(ApproovService.LastPinType);
+    }
+
+    [Fact]
+    public void VerifyPinsForHost_NativeChallengeCannotBeSkippedByRequestMutator()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.SetServiceMutator(new SkipPinningMutator());
+        ApproovService.PublicKeyBytes = new byte[] { 1, 2, 3, 4 };
+        ApproovService.PinsJson = "{\"example.com\":[\"not-the-pin\"]}";
+        using var cert = CreateSelfSignedCert();
+
+        Assert.False(ApproovService.VerifyPinsForHost(
+            "example.com", new[] { cert }));
+        Assert.Equal("public-key-sha256", ApproovService.LastPinType);
     }
 
     [Fact]
@@ -200,6 +255,22 @@ public class ApproovServiceTlsPinningTests : IDisposable
     }
 
     [Fact]
+    public void VerifyServerTrust_EmptyChain_UsesExtraStoreIntermediateForPinning()
+    {
+        ApproovService.Initialize("dummy-config");
+        using var ca = CreateCaCert();
+        using var leaf = CreateCertSignedBy(ca);
+        ApproovService.PinsJson = $"{{\"example.com\":[\"{PinForCert(ca)}\"]}}";
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
+        using var emptyChain = new X509Chain();
+        emptyChain.ChainPolicy.ExtraStore.Add(ca);
+
+        Assert.Empty(emptyChain.ChainElements);
+        Assert.True(ApproovService.VerifyServerTrust(
+            req, leaf, emptyChain, SslPolicyErrors.None));
+    }
+
+    [Fact]
     public void VerifyServerTrust_NullCertOrChain_ReturnsFalse()
     {
         var cert = CreateSelfSignedCert();
@@ -235,8 +306,10 @@ public class ApproovServiceTlsPinningTests : IDisposable
         using var rsa = RSA.Create(2048);
         var req = new CertificateRequest("CN=leaf", rsa, HashAlgorithmName.SHA256,
             RSASignaturePadding.Pkcs1);
+        var childNotAfter = new DateTimeOffset(issuer.NotAfter.ToUniversalTime())
+            .AddMinutes(-1);
         return req.Create(issuer, DateTimeOffset.UtcNow.AddDays(-1),
-            DateTimeOffset.UtcNow.AddDays(365), new byte[] { 1, 2, 3, 4 });
+            childNotAfter, new byte[] { 1, 2, 3, 4 });
     }
 
     // Build an X509Chain whose ChainElements are the supplied certificates (leaf first).

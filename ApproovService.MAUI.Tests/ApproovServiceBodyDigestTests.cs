@@ -1,4 +1,3 @@
-// ApproovService.MAUI.Tests/ApproovServiceBodyDigestTests.cs
 using System.Net;
 using System.Net.Http;
 using System.Threading;
@@ -23,36 +22,58 @@ public class ApproovServiceBodyDigestTests : IDisposable
     }
 
     [Fact]
-    public async Task BodyDigest_PostRequest_AddsContentDigestHeader()
+    public async Task BodyDigest_BypassPost_RemainsUnchanged()
     {
         ApproovService.Initialize("");
-        var handler = new ApproovMessageHandler(new NoOpHandler());
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StringContent("{\"key\":\"value\"}")
-        };
-        await client.SendAsync(req);
+        var req = PostWith(new StringContent("{\"key\":\"value\"}"));
+
+        await SendAsync(req);
+
+        Assert.False(req.Content!.Headers.Contains("Content-Digest"));
+        Assert.Equal(0, ApproovService.InstallSignatureCallCount);
+    }
+
+    [Theory]
+    [InlineData(ApproovTokenFetchStatus.UnknownUrl)]
+    [InlineData(ApproovTokenFetchStatus.UnprotectedUrl)]
+    public async Task BodyDigest_UnprotectedPost_RemainsUnchanged(
+        ApproovTokenFetchStatus status)
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.NextFetchResult = new StubTokenFetchResult
+            { Status = status };
+        var req = PostWith(new StringContent("{\"key\":\"value\"}"));
+
+        await SendAsync(req);
+
+        Assert.False(req.Content!.Headers.Contains("Content-Digest"));
+        Assert.Equal(0, ApproovService.InstallSignatureCallCount);
+    }
+
+    [Fact]
+    public async Task BodyDigest_ProtectedPost_DefaultSignerAddsContentDigestHeader()
+    {
+        ApproovService.Initialize("dummy-config");
+        var req = PostWith(new StringContent("{\"key\":\"value\"}"));
+
+        await SendAsync(req);
+
         Assert.True(req.Content!.Headers.Contains("Content-Digest"));
         string digest = string.Join("", req.Content.Headers.GetValues("Content-Digest"));
         Assert.StartsWith("sha-256=:", digest);
         Assert.EndsWith(":", digest);
+        Assert.Equal(1, ApproovService.InstallSignatureCallCount);
     }
 
     [Fact]
     public async Task BodyDigest_ExistingHeader_IsReplacedInsteadOfDuplicated()
     {
-        ApproovService.Initialize("");
-        var handler = new ApproovMessageHandler(new NoOpHandler());
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StringContent("current-body")
-        };
-        req.Content.Headers.TryAddWithoutValidation(
+        ApproovService.Initialize("dummy-config");
+        var req = PostWith(new StringContent("current-body"));
+        req.Content!.Headers.TryAddWithoutValidation(
             "Content-Digest", "sha-256=:c3RhbGU=:");
 
-        await client.SendAsync(req);
+        await SendAsync(req);
 
         string[] values = req.Content.Headers.GetValues("Content-Digest").ToArray();
         Assert.Single(values);
@@ -62,17 +83,15 @@ public class ApproovServiceBodyDigestTests : IDisposable
     [Theory]
     [InlineData("PUT")]
     [InlineData("PATCH")]
-    public async Task BodyDigest_DocumentedBodyMethods_AddContentDigestHeader(string method)
+    public async Task BodyDigest_ProtectedReplayableBody_AddsContentDigestHeader(string method)
     {
-        ApproovService.Initialize("");
-        var handler = new ApproovMessageHandler(new NoOpHandler());
-        using var client = new HttpClient(handler);
+        ApproovService.Initialize("dummy-config");
         var req = new HttpRequestMessage(new HttpMethod(method), "https://example.com/api")
         {
             Content = new StringContent("body")
         };
 
-        await client.SendAsync(req);
+        await SendAsync(req);
 
         Assert.True(req.Content!.Headers.Contains("Content-Digest"));
     }
@@ -80,57 +99,47 @@ public class ApproovServiceBodyDigestTests : IDisposable
     [Fact]
     public async Task BodyDigest_GetRequest_NoContentDigestHeader()
     {
-        ApproovService.Initialize("");
-        var handler = new ApproovMessageHandler(new NoOpHandler());
-        using var client = new HttpClient(handler);
+        ApproovService.Initialize("dummy-config");
         var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
-        await client.SendAsync(req);
+
+        await SendAsync(req);
+
         Assert.False(req.Content?.Headers.Contains("Content-Digest") ?? false);
     }
 
     [Fact]
-    public async Task BodyDigest_Disabled_PostHasNoContentDigestHeader()
+    public async Task BodyDigest_Disabled_ProtectedPostHasNoContentDigestHeader()
     {
-        ApproovService.Initialize("");
+        ApproovService.Initialize("dummy-config");
         ApproovService.SetBodyDigestEnabled(false);
-        var handler = new ApproovMessageHandler(new NoOpHandler());
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StringContent("hello")
-        };
-        await client.SendAsync(req);
+        var req = PostWith(new StringContent("hello"));
+
+        await SendAsync(req);
+
         Assert.False(req.Content!.Headers.Contains("Content-Digest"));
     }
 
     [Fact]
-    public async Task BodyDigest_MemoryStreamBody_DoesNotThrow()
+    public async Task BodyDigest_MemoryStreamBody_IsDigested()
     {
-        ApproovService.Initialize("");
-        var handler = new ApproovMessageHandler(new NoOpHandler());
-        using var client = new HttpClient(handler);
-        var stream = new System.IO.MemoryStream(new byte[] { 1, 2, 3 });
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StreamContent(stream)
-        };
-        var ex = await Record.ExceptionAsync(() => client.SendAsync(req));
-        Assert.Null(ex);
+        ApproovService.Initialize("dummy-config");
+        var req = PostWith(new StreamContent(
+            new System.IO.MemoryStream(new byte[] { 1, 2, 3 })));
+
+        await SendAsync(req);
+
+        Assert.True(req.Content!.Headers.Contains("Content-Digest"));
     }
 
     [Fact]
     public async Task BodyDigest_DefaultMode_NonSeekableBody_ProceedsWithoutDigest()
     {
-        ApproovService.Initialize("");
+        ApproovService.Initialize("dummy-config");
         var inner = new NoOpHandler();
-        var handler = new ApproovMessageHandler(inner);
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StreamContent(new NonSeekableStream(new byte[] { 1, 2, 3 }))
-        };
+        var req = PostWith(new StreamContent(
+            new NonSeekableStream(new byte[] { 1, 2, 3 })));
 
-        var response = await client.SendAsync(req);
+        var response = await SendAsync(req, inner);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(inner.Reached);
@@ -138,88 +147,54 @@ public class ApproovServiceBodyDigestTests : IDisposable
     }
 
     [Fact]
-    public async Task BodyDigest_RequiredMode_NonSeekableBody_ThrowsAndDoesNotSend()
+    public async Task BodyDigest_RequiredMode_NonSeekableBody_FailsAndDoesNotSend()
     {
-        ApproovService.Initialize("");
+        ApproovService.Initialize("dummy-config");
         ApproovService.SetBodyDigestEnabled(true, required: true);
         var inner = new NoOpHandler();
-        var handler = new ApproovMessageHandler(inner);
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StreamContent(new NonSeekableStream(new byte[] { 1, 2, 3 }))
-        };
+        var req = PostWith(new StreamContent(
+            new NonSeekableStream(new byte[] { 1, 2, 3 })));
 
-        await Assert.ThrowsAsync<PermanentException>(() => client.SendAsync(req));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SendAsync(req, inner));
+
         Assert.False(inner.Reached);
     }
 
     [Fact]
     public async Task BodyDigest_RequiredMode_RepeatableBody_AddsContentDigestHeader()
     {
-        ApproovService.Initialize("");
+        ApproovService.Initialize("dummy-config");
         ApproovService.SetBodyDigestEnabled(true, required: true);
-        var handler = new ApproovMessageHandler(new NoOpHandler());
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StringContent("{\"key\":\"value\"}")
-        };
+        var req = PostWith(new StringContent("{\"key\":\"value\"}"));
 
-        await client.SendAsync(req);
+        await SendAsync(req);
 
         Assert.True(req.Content!.Headers.Contains("Content-Digest"));
     }
 
     [Fact]
-    public async Task BodyDigest_RequiredMode_NoBody_ProceedsWithoutError()
+    public async Task BodyDigest_RequiredMode_NoBody_FailsClosed()
     {
-        // Documented choice: required mode fails closed only when there is a body
-        // that cannot be digested; no body means there is nothing to digest.
-        ApproovService.Initialize("");
+        ApproovService.Initialize("dummy-config");
         ApproovService.SetBodyDigestEnabled(true, required: true);
         var inner = new NoOpHandler();
-        var handler = new ApproovMessageHandler(inner);
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api");
-
-        var response = await client.SendAsync(req);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(inner.Reached);
-    }
-
-    [Fact]
-    public async Task BodyDigest_RequiredMode_NonBodyMethod_ProceedsWithoutError()
-    {
-        ApproovService.Initialize("");
-        ApproovService.SetBodyDigestEnabled(true, required: true);
-        var inner = new NoOpHandler();
-        var handler = new ApproovMessageHandler(inner);
-        using var client = new HttpClient(handler);
         var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com/api");
 
-        var response = await client.SendAsync(req);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SendAsync(req, inner));
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.True(inner.Reached);
+        Assert.False(inner.Reached);
     }
 
     [Fact]
     public async Task BodyDigest_DisabledWithRequired_DisabledWins()
     {
-        // required is only meaningful when the digest is enabled
-        ApproovService.Initialize("");
+        ApproovService.Initialize("dummy-config");
         ApproovService.SetBodyDigestEnabled(false, required: true);
         var inner = new NoOpHandler();
-        var handler = new ApproovMessageHandler(inner);
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StreamContent(new NonSeekableStream(new byte[] { 1, 2, 3 }))
-        };
+        var req = PostWith(new StreamContent(
+            new NonSeekableStream(new byte[] { 1, 2, 3 })));
 
-        var response = await client.SendAsync(req);
+        var response = await SendAsync(req, inner);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(inner.Reached);
@@ -229,44 +204,61 @@ public class ApproovServiceBodyDigestTests : IDisposable
     [Fact]
     public async Task BodyDigest_SingleArgOverload_ClearsRequiredMode()
     {
-        ApproovService.Initialize("");
+        ApproovService.Initialize("dummy-config");
         ApproovService.SetBodyDigestEnabled(true, required: true);
         ApproovService.SetBodyDigestEnabled(true);
         var inner = new NoOpHandler();
-        var handler = new ApproovMessageHandler(inner);
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StreamContent(new NonSeekableStream(new byte[] { 1, 2, 3 }))
-        };
+        var req = PostWith(new StreamContent(
+            new NonSeekableStream(new byte[] { 1, 2, 3 })));
 
-        var response = await client.SendAsync(req);
+        var response = await SendAsync(req, inner);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(inner.Reached);
     }
 
     [Fact]
-    public async Task BodyDigest_Reinitialize_ResetsRequiredModeToDefault()
+    public async Task BodyDigest_SameConfigReinitialize_PreservesRequiredMode()
     {
         ApproovService.Initialize("dummy-config");
         ApproovService.SetBodyDigestEnabled(true, required: true);
-
-        // A successful (re)initialization resets configurable state to defaults
         ApproovService.Initialize("dummy-config");
-
         var inner = new NoOpHandler();
-        var handler = new ApproovMessageHandler(inner);
-        using var client = new HttpClient(handler);
-        var req = new HttpRequestMessage(HttpMethod.Post, "https://example.com/api")
-        {
-            Content = new StreamContent(new NonSeekableStream(new byte[] { 1, 2, 3 }))
-        };
+        var req = PostWith(new StreamContent(
+            new NonSeekableStream(new byte[] { 1, 2, 3 })));
 
-        var response = await client.SendAsync(req);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => SendAsync(req, inner));
+
+        Assert.False(inner.Reached);
+    }
+
+    [Fact]
+    public async Task BodyDigest_DifferentConfigReinitialize_RestoresOptionalDefault()
+    {
+        ApproovService.Initialize("config-a");
+        ApproovService.SetBodyDigestEnabled(true, required: true);
+        ApproovService.Initialize("config-b");
+        var inner = new NoOpHandler();
+        var req = PostWith(new StreamContent(
+            new NonSeekableStream(new byte[] { 1, 2, 3 })));
+
+        var response = await SendAsync(req, inner);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.True(inner.Reached);
+    }
+
+    private static HttpRequestMessage PostWith(HttpContent content) =>
+        new(HttpMethod.Post, "https://example.com/api") { Content = content };
+
+    private static async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, NoOpHandler? inner = null)
+    {
+        inner ??= new NoOpHandler();
+        using var handler = new ApproovMessageHandler(
+            inner, automaticRedirectsAlreadyDisabled: true);
+        using var client = new HttpClient(handler);
+        return await client.SendAsync(request);
     }
 
     private sealed class NoOpHandler : HttpMessageHandler
@@ -277,11 +269,11 @@ public class ApproovServiceBodyDigestTests : IDisposable
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Reached = true;
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                { RequestMessage = request });
         }
     }
 
-    // A read-once stream: no length, no seeking — models one-shot streaming content
     private sealed class NonSeekableStream : System.IO.Stream
     {
         private readonly System.IO.MemoryStream _inner;
@@ -296,12 +288,12 @@ public class ApproovServiceBodyDigestTests : IDisposable
             set => throw new NotSupportedException();
         }
         public override void Flush() { }
-        public override int Read(byte[] buffer, int offset, int count)
-            => _inner.Read(buffer, offset, count);
-        public override long Seek(long offset, System.IO.SeekOrigin origin)
-            => throw new NotSupportedException();
+        public override int Read(byte[] buffer, int offset, int count) =>
+            _inner.Read(buffer, offset, count);
+        public override long Seek(long offset, System.IO.SeekOrigin origin) =>
+            throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
-        public override void Write(byte[] buffer, int offset, int count)
-            => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) =>
+            throw new NotSupportedException();
     }
 }

@@ -102,6 +102,41 @@ public class ApproovServiceSecureStringTests : IDisposable
     }
 
     [Fact]
+    public void SubstitutionHeader_NetworkFailure_ProceedsWithOriginalPlaceholder()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.AddSubstitutionHeader("X-Api-Key", null);
+        ApproovService.NextSecureStringResult = new StubTokenFetchResult
+            { Status = ApproovTokenFetchStatus.NoNetwork, SecureString = "must-not-use" };
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
+        req.Headers.Add("X-Api-Key", "placeholder-value");
+
+        var response = ApproovService.UpdateRequestWithApproov(req);
+
+        Assert.Equal(ApproovFetchDecision.ShouldProceed, response.Decision);
+        Assert.Equal("placeholder-value",
+            string.Join("", response.Request!.Headers.GetValues("X-Api-Key")));
+    }
+
+    [Fact]
+    public void SubstitutionHeader_CustomMutatorCannotUseNonSuccessSecureString()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.SetServiceMutator(new AllowAllSubstitutionsMutator());
+        ApproovService.AddSubstitutionHeader("X-Api-Key", null);
+        ApproovService.NextSecureStringResult = new StubTokenFetchResult
+            { Status = ApproovTokenFetchStatus.UnknownKey, SecureString = "must-not-use" };
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
+        req.Headers.Add("X-Api-Key", "placeholder-value");
+
+        var response = ApproovService.UpdateRequestWithApproov(req);
+
+        Assert.Equal(ApproovFetchDecision.ShouldProceed, response.Decision);
+        Assert.Equal("placeholder-value",
+            string.Join("", response.Request!.Headers.GetValues("X-Api-Key")));
+    }
+
+    [Fact]
     public void SubstitutionHeader_RequiredPrefix_ReplacesSuffixAndPreservesPrefix()
     {
         ApproovService.Initialize("dummy-config");
@@ -179,5 +214,24 @@ public class ApproovServiceSecureStringTests : IDisposable
         Assert.Equal("ARC-jwt", ex.ARC);
         Assert.Equal("bad-payload", ex.RejectionReasons);
         Assert.Equal("{\"data\":\"test\"}", ApproovService.LastCustomJWTPayload);
+    }
+
+    private sealed class AllowAllSubstitutionsMutator : IApproovServiceMutator
+    {
+        public void HandlePrecheckResult(IApproovTokenFetchResult result) { }
+        public void HandleFetchTokenResult(IApproovTokenFetchResult result) { }
+        public void HandleFetchSecureStringResult(
+            IApproovTokenFetchResult result, string operation, string key) { }
+        public void HandleFetchCustomJWTResult(IApproovTokenFetchResult result) { }
+        public bool HandleInterceptorShouldProcessRequest(HttpRequestMessage request) => true;
+        public bool HandleInterceptorFetchTokenResult(
+            IApproovTokenFetchResult result, string url) => true;
+        public bool HandleInterceptorHeaderSubstitutionResult(
+            IApproovTokenFetchResult result, string header) => true;
+        public bool HandleInterceptorQueryParamSubstitutionResult(
+            IApproovTokenFetchResult result, string queryKey) => true;
+        public HttpRequestMessage HandleInterceptorProcessedRequest(
+            HttpRequestMessage request, ApproovRequestMutations changes) => request;
+        public bool HandlePinningShouldProcessRequest(HttpRequestMessage request) => true;
     }
 }

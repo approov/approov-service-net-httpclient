@@ -93,18 +93,31 @@ public class ApproovServiceInitializationEdgeCaseTests : IDisposable
     public void Initialize_SameConfigReinit_ForwardedAndPlatformFalseTreatedAsSuccess()
     {
         ApproovService.Initialize("dummy-config");
-        ApproovService.SetServiceMutator(new TestMutator());
+        var custom = new TestMutator();
+        ApproovService.SetServiceMutator(custom);
         ApproovService.SetApproovTokenHeader("X-Custom", "Bearer ");
+        ApproovService.SetApproovTraceIDHeader("X-Trace");
+        ApproovService.SetBindingHeader("Authorization");
+        ApproovService.SetUseApproovStatusIfNoToken(true);
+        ApproovService.AddSubstitutionHeader("X-Secret", "prefix-");
+        ApproovService.AddSubstitutionQueryParam("api_key");
+        ApproovService.AddExclusionURLRegex("health", ".*health.*");
         ApproovService.NextInitReturnsFalse = true;
 
         ApproovService.Initialize("dummy-config");
 
         Assert.Equal(2, ApproovService.InitCallCount);
         Assert.True(ApproovService.IsApproovEnabled());
-        Assert.Same(ApproovServiceMutatorDefault.Shared, ApproovService.GetServiceMutator());
+        Assert.Same(custom, ApproovService.GetServiceMutator());
         var (header, prefix) = ApproovService.GetApproovTokenHeader();
-        Assert.Equal("Approov-Token", header);
-        Assert.Equal("", prefix);
+        Assert.Equal("X-Custom", header);
+        Assert.Equal("Bearer ", prefix);
+        Assert.Equal("X-Trace", ApproovService.GetApproovTraceIDHeader());
+        Assert.Equal("Authorization", ApproovService.GetBindingHeader());
+        Assert.True(ApproovService.GetUseApproovStatusIfNoToken());
+        Assert.True(ApproovService.GetSubstitutionHeaders().ContainsKey("X-Secret"));
+        Assert.Contains("api_key", ApproovService.GetSubstitutionQueryParams());
+        Assert.True(ApproovService.GetExclusionURLRegexs().ContainsKey("health"));
     }
 
     [Fact]
@@ -163,26 +176,41 @@ public class ApproovServiceInitializationEdgeCaseTests : IDisposable
     }
 
     [Fact]
-    public void Initialize_SameConfigReinit_ResetsCustomMutator()
+    public void Initialize_SameConfigReinit_PreservesCustomMutator()
     {
         ApproovService.Initialize("dummy-config");
         ApproovService.SetServiceMutator(new TestMutator());
 
         ApproovService.Initialize("dummy-config");
 
-        Assert.Same(ApproovServiceMutatorDefault.Shared, ApproovService.GetServiceMutator());
+        Assert.IsType<TestMutator>(ApproovService.GetServiceMutator());
     }
 
     [Fact]
-    public void Initialize_BypassUpgrade_ResetsCustomMutator()
+    public void Initialize_BypassUpgrade_PreservesCustomMutator()
     {
         ApproovService.Initialize("");
-        ApproovService.SetServiceMutator(new TestMutator());
+        var custom = new TestMutator();
+        ApproovService.SetServiceMutator(custom);
+        ApproovService.SetApproovTokenHeader("X-Custom", "Bearer ");
+        ApproovService.SetApproovTraceIDHeader("X-Trace");
+        ApproovService.SetBindingHeader("Authorization");
+        ApproovService.SetUseApproovStatusIfNoToken(true);
+        ApproovService.AddSubstitutionHeader("X-Secret", null);
+        ApproovService.AddSubstitutionQueryParam("api_key");
+        ApproovService.AddExclusionURLRegex("health", ".*health.*");
 
         ApproovService.Initialize("real-config");
 
         Assert.True(ApproovService.IsApproovEnabled());
-        Assert.Same(ApproovServiceMutatorDefault.Shared, ApproovService.GetServiceMutator());
+        Assert.Same(custom, ApproovService.GetServiceMutator());
+        Assert.Equal(("Approov-Token", ""), ApproovService.GetApproovTokenHeader());
+        Assert.Equal("Approov-TraceID", ApproovService.GetApproovTraceIDHeader());
+        Assert.Null(ApproovService.GetBindingHeader());
+        Assert.False(ApproovService.GetUseApproovStatusIfNoToken());
+        Assert.Empty(ApproovService.GetSubstitutionHeaders());
+        Assert.Empty(ApproovService.GetSubstitutionQueryParams());
+        Assert.Empty(ApproovService.GetExclusionURLRegexs());
     }
 
     [Fact]

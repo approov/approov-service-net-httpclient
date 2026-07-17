@@ -15,6 +15,10 @@
 ### Changed
 - Single multi-targeted package (`net9.0-android;net9.0-ios`), replacing the per-platform projects.
 - `IApproovTokenFetchResult` now includes a `TraceID` property.
+- Default request behavior, status handling, token binding, secure-string substitution, dynamic configuration updates, message signing, and trace headers now follow the React Native service layer.
+- Redirects are processed explicitly so every target is retokenized/resigned and cross-origin credentials are stripped.
+- iOS TLS validation now evaluates the original native `SecTrust`; Android pinning checks the callback's complete peer chain, including `ExtraStore` intermediates.
+- `ApproovServiceMutatorDefault` and `ApproovDefaultMessageSigning` callbacks are virtual for selective custom policy overrides.
 
 ### Removed
 - Inheritance-based `ApproovService` (replaced with a static `partial class`).

@@ -1,5 +1,6 @@
 // ApproovService.MAUI.Tests/ApproovServiceInitTests.cs
 using Xunit;
+using Approov.Util.Sig;
 
 namespace Approov.Tests;
 
@@ -56,6 +57,15 @@ public class ApproovServiceInitTests : IDisposable
     {
         ApproovService.SetApproovTraceIDHeader("Approov-TraceID");
         Assert.Equal("Approov-TraceID", ApproovService.GetApproovTraceIDHeader());
+    }
+
+    [Fact]
+    public void Initialize_DefaultsToTraceHeaderAndMessageSigningMutator()
+    {
+        ApproovService.Initialize("dummy-config");
+
+        Assert.Equal("Approov-TraceID", ApproovService.GetApproovTraceIDHeader());
+        Assert.IsType<ApproovDefaultMessageSigning>(ApproovService.GetServiceMutator());
     }
 
     [Fact]

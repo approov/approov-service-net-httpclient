@@ -1,5 +1,6 @@
 // ApproovService.MAUI.Tests/Stubs/ApproovServicePlatformStub.cs
 using System.Security.Cryptography.X509Certificates;
+using System.Collections.Concurrent;
 using Approov.Tests;
 
 namespace Approov;
@@ -10,6 +11,8 @@ public static partial class ApproovService
     internal static StubTokenFetchResult? NextFetchResult = null;
     internal static int FetchCallCount = 0;
     internal static string? LastFetchUrl = null;
+    internal static ConcurrentQueue<string> FetchedUrls = new();
+    internal static ConcurrentQueue<StubTokenFetchResult> FetchResults = new();
     // When set, the next platform token fetch throws this exception (one-shot).
     internal static Exception? NextFetchException = null;
 
@@ -51,10 +54,12 @@ public static partial class ApproovService
     internal static string? LastAccountSignatureMessage = null;
     internal static string? LastInstallSignatureMessage = null;
     internal static string? FetchConfigResult = null;
+    internal static int FetchConfigCallCount = 0;
 
     // New: pinning controls
     internal static string? PinsJson = null;
     internal static string? LastPinType = null;
+    internal static int PinsCallCount = 0;
     internal static byte[]? PublicKeyBytes = null;
     // When true, public-key extraction fails for every certificate (cannot pin it).
     internal static bool ExtractReturnsNull = false;
@@ -64,6 +69,8 @@ public static partial class ApproovService
         NextFetchResult = null;
         FetchCallCount = 0;
         LastFetchUrl = null;
+        FetchedUrls = new();
+        FetchResults = new();
         NextFetchException = null;
         InitCallCount = 0;
         NextInitShouldThrow = false;
@@ -92,8 +99,10 @@ public static partial class ApproovService
         LastAccountSignatureMessage = null;
         LastInstallSignatureMessage = null;
         FetchConfigResult = null;
+        FetchConfigCallCount = 0;
         PinsJson = null;
         LastPinType = null;
+        PinsCallCount = 0;
         PublicKeyBytes = null;
         ExtractReturnsNull = false;
     }
@@ -125,9 +134,11 @@ public static partial class ApproovService
     {
         FetchCallCount++;
         LastFetchUrl = url;
+        FetchedUrls.Enqueue(url);
         TokenFetchStarted.Set();
         if (BlockTokenFetch) ReleaseTokenFetch.Wait();
         if (NextFetchException != null) { var e = NextFetchException; NextFetchException = null; throw e; }
+        if (FetchResults.TryDequeue(out var queuedResult)) return queuedResult;
         if (NextFetchResult != null) { var r = NextFetchResult; NextFetchResult = null; return r; }
         return new StubTokenFetchResult { Status = ApproovTokenFetchStatus.Success, Token = "stub-token" };
     }
@@ -179,11 +190,16 @@ public static partial class ApproovService
 
     private static partial string? PlatformGetPinsJSON(string pinType)
     {
+        PinsCallCount++;
         LastPinType = pinType;
         return PinsJson;
     }
 
-    private static partial string? PlatformFetchConfig() => FetchConfigResult;
+    private static partial string? PlatformFetchConfig()
+    {
+        FetchConfigCallCount++;
+        return FetchConfigResult;
+    }
 
     // When PublicKeyBytes is set, return it for every certificate (single-cert tests).
     // Otherwise return the certificate's real DER SubjectPublicKeyInfo, matching the

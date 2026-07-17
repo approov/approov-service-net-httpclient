@@ -48,20 +48,27 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
 
     // ---- IApproovServiceMutator: delegate everything except the signing step ----
     private static IApproovServiceMutator Base => ApproovServiceMutatorDefault.Shared;
-    public void HandlePrecheckResult(IApproovTokenFetchResult r) => Base.HandlePrecheckResult(r);
-    public void HandleFetchTokenResult(IApproovTokenFetchResult r) => Base.HandleFetchTokenResult(r);
-    public void HandleFetchSecureStringResult(IApproovTokenFetchResult r, string op, string key)
+    public virtual void HandlePrecheckResult(IApproovTokenFetchResult r)
+        => Base.HandlePrecheckResult(r);
+    public virtual void HandleFetchTokenResult(IApproovTokenFetchResult r)
+        => Base.HandleFetchTokenResult(r);
+    public virtual void HandleFetchSecureStringResult(
+        IApproovTokenFetchResult r, string op, string key)
         => Base.HandleFetchSecureStringResult(r, op, key);
-    public void HandleFetchCustomJWTResult(IApproovTokenFetchResult r) => Base.HandleFetchCustomJWTResult(r);
-    public bool HandleInterceptorShouldProcessRequest(HttpRequestMessage req)
+    public virtual void HandleFetchCustomJWTResult(IApproovTokenFetchResult r)
+        => Base.HandleFetchCustomJWTResult(r);
+    public virtual bool HandleInterceptorShouldProcessRequest(HttpRequestMessage req)
         => Base.HandleInterceptorShouldProcessRequest(req);
-    public bool HandleInterceptorFetchTokenResult(IApproovTokenFetchResult r, string url)
+    public virtual bool HandleInterceptorFetchTokenResult(
+        IApproovTokenFetchResult r, string url)
         => Base.HandleInterceptorFetchTokenResult(r, url);
-    public bool HandleInterceptorHeaderSubstitutionResult(IApproovTokenFetchResult r, string h)
+    public virtual bool HandleInterceptorHeaderSubstitutionResult(
+        IApproovTokenFetchResult r, string h)
         => Base.HandleInterceptorHeaderSubstitutionResult(r, h);
-    public bool HandleInterceptorQueryParamSubstitutionResult(IApproovTokenFetchResult r, string k)
+    public virtual bool HandleInterceptorQueryParamSubstitutionResult(
+        IApproovTokenFetchResult r, string k)
         => Base.HandleInterceptorQueryParamSubstitutionResult(r, k);
-    public bool HandlePinningShouldProcessRequest(HttpRequestMessage req)
+    public virtual bool HandlePinningShouldProcessRequest(HttpRequestMessage req)
         => Base.HandlePinningShouldProcessRequest(req);
 
     /// <summary>
@@ -69,7 +76,7 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
     /// interceptor. Only requests that carry an Approov token and that have a configured
     /// factory are signed.
     /// </summary>
-    public HttpRequestMessage HandleInterceptorProcessedRequest(
+    public virtual HttpRequestMessage HandleInterceptorProcessedRequest(
         HttpRequestMessage request, ApproovRequestMutations changes)
     {
         if (changes?.TokenHeaderKey == null)

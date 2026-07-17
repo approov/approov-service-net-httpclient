@@ -28,5 +28,5 @@ The namespace remains `Approov`. No namespace change required.
 - `SetApproovTraceIDHeader` — propagate the Approov trace ID to a request header
 - `GetInstallMessageSignature` — per-install message signing (Android and iOS; returns `null` in bypass mode)
 - `SetDevKey` — developer key injection
-- HTTP message signing via the `ApproovDefaultMessageSigning` service mutator (opt-in, fail-open)
+- Automatic fail-open HTTP message signing via the initial `ApproovDefaultMessageSigning` mutator
 - Configurable failure cache TTL (`SetFailureCacheTTL`)

@@ -15,7 +15,8 @@ namespace ApproovSDK
         string Token();
 
         // @property (readonly) NSString * _Nullable secureString;
-        [NullAllowed, Export("secureString")]
+        [Export("secureString")]
+        [return: NullAllowed]
         string SecureString();
 
         // @property (readonly) NSString * _Nonnull ARC;
@@ -35,7 +36,8 @@ namespace ApproovSDK
         bool IsForceApplyPins();
 
         // @property (readonly) NSData * _Nullable measurementConfig;
-        [NullAllowed, Export("measurementConfig")]
+        [Export("measurementConfig")]
+        [return: NullAllowed]
         NSData MeasurementConfig();
 
         // -(NSString * _Nonnull)loggableToken;
@@ -43,7 +45,8 @@ namespace ApproovSDK
         string LoggableToken();
 
         // @property (readonly) NSString * _Nullable traceID;
-        [NullAllowed, Export("traceID")]
+        [Export("traceID")]
+        [return: NullAllowed]
         string TraceID();
     }
 
@@ -66,7 +69,8 @@ namespace ApproovSDK
 
         // +(NSString * _Nullable)fetchConfig;
         [Static]
-        [NullAllowed, Export("fetchConfig")]
+        [Export("fetchConfig")]
+        [return: NullAllowed]
         string FetchConfig();
 
         // +(NSDictionary<NSString *,NSArray<NSString *> *> * _Nullable)getPins:(NSString * _Nonnull)pinType;
@@ -135,7 +139,8 @@ namespace ApproovSDK
 
         // +(NSString * _Nullable)getDeviceID;
         [Static]
-        [NullAllowed, Export("getDeviceID")]
+        [Export("getDeviceID")]
+        [return: NullAllowed]
         string DeviceID();
 
         // +(NSString * _Nullable)getMessageSignature:(NSString * _Nonnull)message;

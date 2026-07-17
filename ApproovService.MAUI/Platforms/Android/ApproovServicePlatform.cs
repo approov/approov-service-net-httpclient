@@ -10,14 +10,11 @@ public static partial class ApproovService
     private static partial bool PlatformInitializeSdk(string config, string? comment)
     {
         var context = Android.App.Application.Context;
-        string? initial = config; string? update = null;
-        int ci = config.IndexOf(':');
-        if (ci >= 0) { initial = config[..ci]; update = config[(ci + 1)..]; }
         try
         {
             // false means the SDK is already initialized, which is not a failure
             return global::Com.Criticalblue.Approovsdk.Approov.Initialize(
-                context, initial, update, comment);
+                context, config, "auto", comment);
         }
         catch (Java.Lang.Exception ex)
         {

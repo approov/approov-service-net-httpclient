@@ -19,12 +19,12 @@ public interface IApproovServiceMutator
     bool HandlePinningShouldProcessRequest(HttpRequestMessage request);
 }
 
-public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
+public class ApproovServiceMutatorDefault : IApproovServiceMutator
 {
     public static readonly ApproovServiceMutatorDefault Shared = new();
-    private ApproovServiceMutatorDefault() { }
+    public ApproovServiceMutatorDefault() { }
 
-    public void HandlePrecheckResult(IApproovTokenFetchResult r)
+    public virtual void HandlePrecheckResult(IApproovTokenFetchResult r)
     {
         switch (r.Status)
         {
@@ -42,7 +42,7 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
         }
     }
 
-    public void HandleFetchTokenResult(IApproovTokenFetchResult r)
+    public virtual void HandleFetchTokenResult(IApproovTokenFetchResult r)
     {
         switch (r.Status)
         {
@@ -57,7 +57,8 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
         }
     }
 
-    public void HandleFetchSecureStringResult(IApproovTokenFetchResult r, string operation, string key)
+    public virtual void HandleFetchSecureStringResult(
+        IApproovTokenFetchResult r, string operation, string key)
     {
         switch (r.Status)
         {
@@ -76,7 +77,7 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
         }
     }
 
-    public void HandleFetchCustomJWTResult(IApproovTokenFetchResult r)
+    public virtual void HandleFetchCustomJWTResult(IApproovTokenFetchResult r)
     {
         switch (r.Status)
         {
@@ -93,7 +94,7 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
         }
     }
 
-    public bool HandleInterceptorShouldProcessRequest(HttpRequestMessage request)
+    public virtual bool HandleInterceptorShouldProcessRequest(HttpRequestMessage request)
     {
         string urlString = request.RequestUri?.AbsoluteUri ?? "";
         foreach (var (_, regex) in ApproovService.GetExclusionURLRegexs())
@@ -103,7 +104,8 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
         return true;
     }
 
-    public bool HandleInterceptorFetchTokenResult(IApproovTokenFetchResult r, string url)
+    public virtual bool HandleInterceptorFetchTokenResult(
+        IApproovTokenFetchResult r, string url)
     {
         switch (r.Status)
         {
@@ -114,6 +116,7 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
             case ApproovTokenFetchStatus.MitmDetected:
                 throw new NetworkingErrorException($"token fetch for {url}: " + r.Status);
             case ApproovTokenFetchStatus.NoApproovService:
+                return ApproovService.GetUseApproovStatusIfNoToken();
             case ApproovTokenFetchStatus.UnknownUrl:
             case ApproovTokenFetchStatus.UnprotectedUrl:
                 return false;
@@ -124,7 +127,8 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
         }
     }
 
-    public bool HandleInterceptorHeaderSubstitutionResult(IApproovTokenFetchResult r, string header)
+    public virtual bool HandleInterceptorHeaderSubstitutionResult(
+        IApproovTokenFetchResult r, string header)
     {
         switch (r.Status)
         {
@@ -136,7 +140,7 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
             case ApproovTokenFetchStatus.NoNetwork:
             case ApproovTokenFetchStatus.PoorNetwork:
             case ApproovTokenFetchStatus.MitmDetected:
-                throw new NetworkingErrorException($"header substitution for {header}: " + r.Status);
+                return false;
             case ApproovTokenFetchStatus.UnknownKey:
                 return false;
             default:
@@ -144,7 +148,8 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
         }
     }
 
-    public bool HandleInterceptorQueryParamSubstitutionResult(IApproovTokenFetchResult r, string queryKey)
+    public virtual bool HandleInterceptorQueryParamSubstitutionResult(
+        IApproovTokenFetchResult r, string queryKey)
     {
         switch (r.Status)
         {
@@ -156,7 +161,7 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
             case ApproovTokenFetchStatus.NoNetwork:
             case ApproovTokenFetchStatus.PoorNetwork:
             case ApproovTokenFetchStatus.MitmDetected:
-                throw new NetworkingErrorException($"query param substitution for {queryKey}: " + r.Status);
+                return false;
             case ApproovTokenFetchStatus.UnknownKey:
                 return false;
             default:
@@ -164,9 +169,9 @@ public sealed class ApproovServiceMutatorDefault : IApproovServiceMutator
         }
     }
 
-    public HttpRequestMessage HandleInterceptorProcessedRequest(HttpRequestMessage request,
-                                                                ApproovRequestMutations changes)
+    public virtual HttpRequestMessage HandleInterceptorProcessedRequest(
+        HttpRequestMessage request, ApproovRequestMutations changes)
         => request;
 
-    public bool HandlePinningShouldProcessRequest(HttpRequestMessage request) => true;
+    public virtual bool HandlePinningShouldProcessRequest(HttpRequestMessage request) => true;
 }

@@ -106,6 +106,28 @@ public class ApproovServiceMutatorTests
             ResultWith(ApproovTokenFetchStatus.UnknownKey), "X-Header"));
     }
 
+    [Theory]
+    [InlineData(ApproovTokenFetchStatus.NoNetwork)]
+    [InlineData(ApproovTokenFetchStatus.PoorNetwork)]
+    [InlineData(ApproovTokenFetchStatus.MitmDetected)]
+    public void HandleInterceptorHeaderSubstitutionResult_NetworkFailure_ReturnsFalse(
+        ApproovTokenFetchStatus status)
+    {
+        Assert.False(_sut.HandleInterceptorHeaderSubstitutionResult(
+            ResultWith(status), "X-Header"));
+    }
+
+    [Theory]
+    [InlineData(ApproovTokenFetchStatus.NoNetwork)]
+    [InlineData(ApproovTokenFetchStatus.PoorNetwork)]
+    [InlineData(ApproovTokenFetchStatus.MitmDetected)]
+    public void HandleInterceptorQueryParamSubstitutionResult_NetworkFailure_ReturnsFalse(
+        ApproovTokenFetchStatus status)
+    {
+        Assert.False(_sut.HandleInterceptorQueryParamSubstitutionResult(
+            ResultWith(status), "api_key"));
+    }
+
     // --- HandleInterceptorProcessedRequest (default = pass-through) ---
 
     [Fact]
@@ -124,5 +146,25 @@ public class ApproovServiceMutatorTests
     {
         var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
         Assert.True(_sut.HandlePinningShouldProcessRequest(req));
+    }
+
+    [Fact]
+    public void DefaultMutator_CanOverrideOneCallbackAndInheritTheRest()
+    {
+        var mutator = new AllowNoNetworkMutator();
+
+        Assert.False(mutator.HandleInterceptorFetchTokenResult(
+            ResultWith(ApproovTokenFetchStatus.NoNetwork), "https://example.com"));
+        Assert.True(mutator.HandlePinningShouldProcessRequest(
+            new HttpRequestMessage(HttpMethod.Get, "https://example.com")));
+    }
+
+    private sealed class AllowNoNetworkMutator : ApproovServiceMutatorDefault
+    {
+        public override bool HandleInterceptorFetchTokenResult(
+            IApproovTokenFetchResult result, string url)
+            => result.Status == ApproovTokenFetchStatus.NoNetwork
+                ? false
+                : base.HandleInterceptorFetchTokenResult(result, url);
     }
 }

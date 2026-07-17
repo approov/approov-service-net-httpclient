@@ -2,6 +2,7 @@
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
+using Approov.Util.Sig;
 
 namespace Approov;
 
@@ -25,14 +26,15 @@ public static partial class ApproovService
     // Token configuration
     private static string _approovTokenHeader = "Approov-Token";
     private static string _approovTokenPrefix = "";
-    private static string? _approovTraceIDHeader = null;
+    private static string? _approovTraceIDHeader = "Approov-TraceID";
     private static string? _bindingHeader = null;
     private static bool _useApproovStatusIfNoToken = false;
     private static bool _bodyDigestEnabled = true;
     private static bool _bodyDigestRequired = false;
 
     // Service wiring
-    private static IApproovServiceMutator _serviceMutator = ApproovServiceMutatorDefault.Shared;
+    private static IApproovServiceMutator _serviceMutator = CreateInitialServiceMutator();
+    private static bool _isInitialServiceMutator = true;
 
     // Substitution tables
     private static Dictionary<string, string> _substitutionHeaders = new();
@@ -45,6 +47,7 @@ public static partial class ApproovService
 
     // Failure cache
     private static IApproovTokenFetchResult? _failureCacheResult = null;
+    private static string? _failureCacheKey = null;
     private static DateTime _failureCacheExpiry = DateTime.MinValue;
     private static double _failureCacheTTL = 5.0;
     private static ManualResetEventSlim? _failureCacheMissGroup = null;
@@ -79,6 +82,39 @@ public static partial class ApproovService
         public string? TraceID => null;
     }
 
+    private static IApproovServiceMutator CreateInitialServiceMutator()
+        => new ApproovDefaultMessageSigning().SetDefaultFactory(CreateDefaultSigningFactory());
+
+    private static ApproovDefaultMessageSigning.SignatureParametersFactory
+        CreateDefaultSigningFactory()
+    {
+        var factory = ApproovDefaultMessageSigning.GenerateDefaultSignatureParametersFactory();
+        return factory.SetBodyDigestConfig(
+            _bodyDigestEnabled ? ApproovDefaultMessageSigning.DIGEST_SHA256 : null,
+            _bodyDigestRequired);
+    }
+
+    // Reset configuration that belongs to the request service layer. The active
+    // mutator is intentionally not reset: the React Native service permits an app to
+    // install a custom mutator before initialization and preserves it across a
+    // same-process initialization.
+    private static void ResetRuntimeConfiguration()
+    {
+        _approovTokenHeader = "Approov-Token";
+        _approovTokenPrefix = "";
+        _approovTraceIDHeader = "Approov-TraceID";
+        _bindingHeader = null;
+        _useApproovStatusIfNoToken = false;
+        _bodyDigestEnabled = true;
+        _bodyDigestRequired = false;
+        _substitutionHeaders = new();
+        _substitutionQueryParams = new();
+        _exclusionURLRegexs = new();
+        if (_isInitialServiceMutator
+            && _serviceMutator is ApproovDefaultMessageSigning signer)
+            signer.SetDefaultFactory(CreateDefaultSigningFactory());
+    }
+
     public static void Initialize(string config, string? comment = null)
     {
         lock (_initLock)
@@ -91,12 +127,16 @@ public static partial class ApproovService
                         "Initialize with empty configuration ignored: already initialized");
                     return;
                 }
+                lock (_stateLock) { ResetRuntimeConfiguration(); }
                 _configUsed = config;
                 _isBypassMode = true;
                 _sdkInitialized = true;
                 Log(ApproovLogLevel.Info, "ApproovService initialized in bypass mode");
                 return;
             }
+
+            bool configUnchanged = _sdkInitialized
+                && string.Equals(_configUsed, config, StringComparison.Ordinal);
 
             // Non-empty configs are always forwarded to the platform SDK; a throw
             // propagates before any service-layer state is modified
@@ -106,17 +146,10 @@ public static partial class ApproovService
                     "Platform SDK reports already initialized: treated as success");
             PlatformSetUserProperty("approov-service-maui/3.5.5");
 
-            // Platform success: reset and re-commit service-layer state
-            lock (_stateLock)
-            {
-                _approovTokenHeader = "Approov-Token"; _approovTokenPrefix = "";
-                _approovTraceIDHeader = null; _bindingHeader = null;
-                _useApproovStatusIfNoToken = false; _bodyDigestEnabled = true;
-                _bodyDigestRequired = false;
-                _serviceMutator = ApproovServiceMutatorDefault.Shared;
-                _substitutionHeaders = new(); _substitutionQueryParams = new();
-                _exclusionURLRegexs = new();
-            }
+            // A duplicate initialization is common during development remounts. Keep
+            // all runtime request configuration in that case, matching React Native.
+            if (!configUnchanged)
+                lock (_stateLock) { ResetRuntimeConfiguration(); }
             _configUsed = config;
             _isBypassMode = false;
             _sdkInitialized = true;
@@ -188,6 +221,11 @@ public static partial class ApproovService
         lock (_stateLock) { _useApproovStatusIfNoToken = use; }
     }
 
+    internal static bool GetUseApproovStatusIfNoToken()
+    {
+        lock (_stateLock) { return _useApproovStatusIfNoToken; }
+    }
+
     public static void SetBodyDigestEnabled(bool enabled)
     {
         SetBodyDigestEnabled(enabled, false);
@@ -195,9 +233,9 @@ public static partial class ApproovService
 
     // Configures Content-Digest generation. When required is true (and the digest is
     // enabled) a POST/PUT/PATCH request whose body cannot be digested (one-shot
-    // streaming content, or a digest computation failure) fails closed with a
-    // PermanentException instead of being sent without a Content-Digest header.
-    // A request with no body never fails: there is nothing to digest.
+    // streaming content, an empty body, or a digest computation failure) fails closed
+    // instead of being sent without a Content-Digest header. This mirrors the native
+    // React Native signers: "required" means a digest must actually be generated.
     // required is only meaningful while enabled; each call fully specifies the config,
     // so SetBodyDigestEnabled(enabled) clears any previously set required mode.
     public static void SetBodyDigestEnabled(bool enabled, bool required)
@@ -206,6 +244,9 @@ public static partial class ApproovService
         {
             _bodyDigestEnabled = enabled;
             _bodyDigestRequired = enabled && required;
+            if (_isInitialServiceMutator
+                && _serviceMutator is ApproovDefaultMessageSigning signer)
+                signer.SetDefaultFactory(CreateDefaultSigningFactory());
         }
     }
 
@@ -226,7 +267,11 @@ public static partial class ApproovService
 
     public static void SetServiceMutator(IApproovServiceMutator? mutator)
     {
-        lock (_stateLock) { _serviceMutator = mutator ?? ApproovServiceMutatorDefault.Shared; }
+        lock (_stateLock)
+        {
+            _serviceMutator = mutator ?? ApproovServiceMutatorDefault.Shared;
+            _isInitialServiceMutator = false;
+        }
     }
 
     public static IApproovServiceMutator GetServiceMutator()
@@ -253,14 +298,16 @@ public static partial class ApproovService
         {
             _sdkInitialized = false; _configUsed = null; _isBypassMode = false;
             _approovTokenHeader = "Approov-Token"; _approovTokenPrefix = "";
-            _approovTraceIDHeader = null; _bindingHeader = null;
+            _approovTraceIDHeader = "Approov-TraceID"; _bindingHeader = null;
             _useApproovStatusIfNoToken = false; _bodyDigestEnabled = true;
             _bodyDigestRequired = false;
-            _serviceMutator = ApproovServiceMutatorDefault.Shared;
+            _serviceMutator = CreateInitialServiceMutator();
+            _isInitialServiceMutator = true;
             _substitutionHeaders = new(); _substitutionQueryParams = new();
             _exclusionURLRegexs = new(); _lastARC = "";
             _loggingLevel = ApproovLogLevel.Info;
-            _failureCacheResult = null; _failureCacheExpiry = DateTime.MinValue;
+            _failureCacheResult = null; _failureCacheKey = null;
+            _failureCacheExpiry = DateTime.MinValue;
             _failureCacheTTL = 5.0; _failureCacheMissGroup = null;
         }
     }
@@ -326,8 +373,11 @@ public static partial class ApproovService
     public static void Precheck()
     {
         EnsureInitialized();
-        if (_isBypassMode) return;
-        var result = PlatformFetchApproovTokenAndWait("approov.io");
+        if (_isBypassMode)
+            throw new PermanentException("precheck: Approov is disabled");
+        // A secure-string lookup performs an attestation without requiring a
+        // protected API hostname. UNKNOWN_KEY is the expected successful outcome.
+        var result = PlatformFetchSecureStringAndWait("precheck-dummy-key", null);
         IApproovServiceMutator mutator;
         lock (_stateLock) { mutator = _serviceMutator; }
         mutator.HandlePrecheckResult(result);
@@ -337,7 +387,11 @@ public static partial class ApproovService
     {
         EnsureInitialized();
         if (_isBypassMode) return new BypassFetchResult(ApproovTokenFetchStatus.UnknownUrl);
-        var result = PlatformFetchApproovTokenAndWait(url);
+        IApproovTokenFetchResult result;
+        // Serialize direct token fetches with interceptor binding updates so they cannot
+        // observe or disturb the SDK data hash halfway through a bound request.
+        lock (_bindingFetchLock)
+            result = PlatformFetchApproovTokenAndWait(url);
         IApproovServiceMutator mutator;
         lock (_stateLock) { mutator = _serviceMutator; }
         mutator.HandleFetchTokenResult(result);
@@ -387,7 +441,12 @@ public static partial class ApproovService
     public static void SetDataHashInToken(string data)
     {
         EnsureInitialized();
-        if (!_isBypassMode) PlatformSetDataHashInToken(data);
+        if (!_isBypassMode)
+        {
+            // The SDK data hash is global persistent state. Use the same lock as bound
+            // request processing and direct token fetches to prevent mid-fetch changes.
+            lock (_bindingFetchLock) PlatformSetDataHashInToken(data);
+        }
     }
 
     public static void SetDevKey(string devKey)
@@ -405,6 +464,9 @@ public static partial class ApproovService
 
 public static partial class ApproovService
 {
+    internal static readonly HttpRequestOptionsKey<bool> SkipSubstitutionsOption =
+        new("Approov.SkipSubstitutions");
+
     public static ApproovUpdateResponse UpdateRequestWithApproov(HttpRequestMessage request)
     {
         if (!_sdkInitialized)
@@ -439,18 +501,15 @@ public static partial class ApproovService
             IApproovTokenFetchResult tokenResult;
             if (bindingHeader != null)
             {
-                if (!request.Headers.TryGetValues(bindingHeader, out var bindingValues))
-                    throw new ConfigurationFailureException(
-                        $"Binding header '{bindingHeader}' is missing from the request");
-
-                string[] values = bindingValues.ToArray();
-                if (values.Length != 1)
-                    throw new ConfigurationFailureException(
-                        $"Binding header '{bindingHeader}' must contain exactly one value");
-
+                // Binding is persistent SDK state, so every token fetch must take this
+                // lock while binding is configured. Otherwise a bound request could
+                // change the SDK hash while a concurrent request without the header is
+                // already fetching a token. Header presence remains optional, matching
+                // React Native; when present, serialize all values as the transport does.
                 lock (_bindingFetchLock)
                 {
-                    PlatformSetDataHashInToken(values[0]);
+                    if (request.Headers.TryGetValues(bindingHeader, out var bindingValues))
+                        PlatformSetDataHashInToken(string.Join(",", bindingValues));
                     tokenResult = FetchApproovTokenWithFailureCache(url);
                 }
             }
@@ -459,39 +518,58 @@ public static partial class ApproovService
                 tokenResult = FetchApproovTokenWithFailureCache(url);
             }
 
+            if (tokenResult.IsConfigChanged)
+            {
+                PlatformFetchConfig();
+                Log(ApproovLogLevel.Info, "Dynamic Approov configuration update received");
+            }
+            if (tokenResult.IsForceApplyPins)
+            {
+                // Reading the pins applies/clears the SDK force flag. Abort this
+                // request afterwards so no pooled connection can bypass the refresh.
+                string? refreshedPins = PlatformGetPinsJSON("public-key-sha256");
+                if (string.IsNullOrEmpty(refreshedPins))
+                    throw new PinningErrorException(
+                        "Approov requested a pin refresh but returned no pins");
+                throw new NetworkingErrorException("Approov pins need to be updated");
+            }
+
             string tokenHeader, tokenPrefix;
             lock (_stateLock) { tokenHeader = _approovTokenHeader; tokenPrefix = _approovTokenPrefix; }
 
             bool useStatus;
             lock (_stateLock) { useStatus = _useApproovStatusIfNoToken; }
 
-            bool shouldAddToken;
-            try
+            bool shouldContinue = mutator.HandleInterceptorFetchTokenResult(tokenResult, url);
+            if (!shouldContinue)
             {
-                shouldAddToken = mutator.HandleInterceptorFetchTokenResult(tokenResult, url);
-                if (shouldAddToken)
-                {
-                    request.Headers.Remove(tokenHeader);
-                    request.Headers.Add(tokenHeader, tokenPrefix + tokenResult.Token);
-                }
-                else if (useStatus && string.IsNullOrEmpty(tokenResult.Token))
-                {
-                    request.Headers.Remove(tokenHeader);
-                    request.Headers.Add(tokenHeader, tokenPrefix + tokenResult.Status.ToString());
-                }
+                // UNKNOWN_URL, UNPROTECTED_URL and (by default) NO_APPROOV_SERVICE
+                // must be forwarded unchanged. In particular, do not resolve secure
+                // strings into a domain that is unknown to Approov pinning.
+                return new ApproovUpdateResponse { Request = request,
+                    Decision = ApproovFetchDecision.ShouldProceed,
+                    SdkMessage = StatusToString(tokenResult.Status) };
             }
-            catch (NetworkingErrorException) when (useStatus)
+
+            bool addedTokenHeader = false;
+            if (tokenResult.Status == ApproovTokenFetchStatus.Success
+                && !string.IsNullOrEmpty(tokenResult.Token))
             {
-                // Status injection: when flag is on, treat network errors as proceed-with-status-string
-                shouldAddToken = false;
                 request.Headers.Remove(tokenHeader);
-                request.Headers.Add(tokenHeader, tokenPrefix + tokenResult.Status.ToString());
+                request.Headers.Add(tokenHeader, tokenPrefix + tokenResult.Token);
+                addedTokenHeader = true;
+            }
+            else if (useStatus && string.IsNullOrEmpty(tokenResult.Token))
+            {
+                request.Headers.Remove(tokenHeader);
+                request.Headers.Add(tokenHeader, tokenPrefix + StatusToString(tokenResult.Status));
+                addedTokenHeader = true;
             }
 
             // TraceID header
             string? traceIDHeader;
             lock (_stateLock) { traceIDHeader = _approovTraceIDHeader; }
-            if (traceIDHeader != null && tokenResult.TraceID != null)
+            if (traceIDHeader != null && !string.IsNullOrEmpty(tokenResult.TraceID))
             {
                 request.Headers.Remove(traceIDHeader);
                 request.Headers.Add(traceIDHeader, tokenResult.TraceID);
@@ -500,22 +578,35 @@ public static partial class ApproovService
             // Header substitutions
             var mutations = new ApproovRequestMutations
             {
-                TokenHeaderKey = shouldAddToken ? tokenHeader : null,
-                TraceIDHeaderKey = traceIDHeader != null && tokenResult.TraceID != null ? traceIDHeader : null,
+                // A proceeding status value is token-header material too and is
+                // included in message signing by the React Native implementation.
+                TokenHeaderKey = addedTokenHeader ? tokenHeader : null,
+                TraceIDHeaderKey = traceIDHeader != null
+                    && !string.IsNullOrEmpty(tokenResult.TraceID) ? traceIDHeader : null,
                 OriginalURL = url
             };
 
+            bool skipSubstitutions = request.Options.TryGetValue(
+                SkipSubstitutionsOption, out bool skip) && skip;
             Dictionary<string, string> subHeaders;
-            lock (_stateLock) { subHeaders = new Dictionary<string, string>(_substitutionHeaders); }
+            lock (_stateLock)
+            {
+                subHeaders = skipSubstitutions
+                    ? new Dictionary<string, string>()
+                    : new Dictionary<string, string>(_substitutionHeaders);
+            }
             foreach (var (header, requiredPrefix) in subHeaders)
             {
                 if (!request.Headers.TryGetValues(header, out var existingValues)) continue;
                 string existing = string.Join(",", existingValues);
+                if (existing.Length <= requiredPrefix.Length) continue;
                 if (!string.IsNullOrEmpty(requiredPrefix) && !existing.StartsWith(requiredPrefix)) continue;
                 string lookupKey = string.IsNullOrEmpty(requiredPrefix)
                     ? existing : existing.Substring(requiredPrefix.Length);
                 var subResult = FetchSecureStringWithFailureCache(lookupKey, null);
-                if (mutator.HandleInterceptorHeaderSubstitutionResult(subResult, header))
+                if (mutator.HandleInterceptorHeaderSubstitutionResult(subResult, header)
+                    && subResult.Status == ApproovTokenFetchStatus.Success
+                    && subResult.SecureString != null)
                 {
                     request.Headers.Remove(header);
                     request.Headers.Add(header, requiredPrefix + (subResult.SecureString ?? existing));
@@ -525,7 +616,12 @@ public static partial class ApproovService
 
             // Query parameter substitutions
             HashSet<string> subQueryParams;
-            lock (_stateLock) { subQueryParams = new HashSet<string>(_substitutionQueryParams); }
+            lock (_stateLock)
+            {
+                subQueryParams = skipSubstitutions
+                    ? new HashSet<string>()
+                    : new HashSet<string>(_substitutionQueryParams);
+            }
             if (subQueryParams.Count > 0 && request.RequestUri != null)
             {
                 string raw = request.RequestUri.Query;
@@ -541,7 +637,9 @@ public static partial class ApproovService
                         string pk = Uri.UnescapeDataString(kv[0]);
                         string pv = Uri.UnescapeDataString(kv[1]);
                         var sub = FetchSecureStringWithFailureCache(pv, null);
-                        if (mutator.HandleInterceptorQueryParamSubstitutionResult(sub, pk))
+                        if (mutator.HandleInterceptorQueryParamSubstitutionResult(sub, pk)
+                            && sub.Status == ApproovTokenFetchStatus.Success
+                            && sub.SecureString != null)
                         {
                             newParts.Add($"{kv[0]}={Uri.EscapeDataString(sub.SecureString ?? pv)}");
                             mutations.AddSubstitutionQueryParamKey(pk);
@@ -583,6 +681,22 @@ public static partial class ApproovService
         }
     }
 
+    internal static string StatusToString(ApproovTokenFetchStatus status) => status switch
+    {
+        ApproovTokenFetchStatus.Success => "SUCCESS",
+        ApproovTokenFetchStatus.NoNetwork => "NO_NETWORK",
+        ApproovTokenFetchStatus.MitmDetected => "MITM_DETECTED",
+        ApproovTokenFetchStatus.PoorNetwork => "POOR_NETWORK",
+        ApproovTokenFetchStatus.Disabled => "DISABLED",
+        ApproovTokenFetchStatus.UnknownKey => "UNKNOWN_KEY",
+        ApproovTokenFetchStatus.Rejected => "REJECTED",
+        ApproovTokenFetchStatus.UnknownUrl => "UNKNOWN_URL",
+        ApproovTokenFetchStatus.UnprotectedUrl => "UNPROTECTED_URL",
+        ApproovTokenFetchStatus.NoApproovService => "NO_APPROOV_SERVICE",
+        ApproovTokenFetchStatus.BadPayload => "BAD_PAYLOAD",
+        _ => "INTERNAL_ERROR"
+    };
+
 
     /// <summary>
     /// Decides whether to trust the server for a TLS handshake. Enforces normal certificate
@@ -599,19 +713,25 @@ public static partial class ApproovService
         if (sslPolicyErrors != SslPolicyErrors.None) return false;
         if (serverCert == null || chain == null) return false;
         var chainCertificates = new List<X509Certificate2>(
-            Math.Max(1, chain.ChainElements.Count));
-        if (chain.ChainElements.Count == 0)
-        {
-            // Some MAUI/iOS runtime versions report a valid TLS result with an empty
-            // callback chain. The leaf is still available and must remain pinnable.
-            chainCertificates.Add(serverCert);
-        }
-        else
-        {
-            foreach (var element in chain.ChainElements)
-                chainCertificates.Add(element.Certificate);
-        }
+            Math.Max(1, chain.ChainElements.Count + chain.ChainPolicy.ExtraStore.Count));
+        foreach (var element in chain.ChainElements)
+            AddCertificateIfMissing(chainCertificates, element.Certificate);
+
+        // Some Android callbacks expose only the leaf (or no ChainElements) while the
+        // peer intermediates remain in ExtraStore. Merge both sources unconditionally so
+        // an intermediate/root pin is not lost merely because a leaf element was present.
+        AddCertificateIfMissing(chainCertificates, serverCert);
+        foreach (var certificate in chain.ChainPolicy.ExtraStore)
+            AddCertificateIfMissing(chainCertificates, certificate);
         return VerifyPinning(request, chainCertificates);
+    }
+
+    private static void AddCertificateIfMissing(
+        List<X509Certificate2> certificates, X509Certificate2 candidate)
+    {
+        if (!certificates.Any(existing =>
+                existing.RawData.AsSpan().SequenceEqual(candidate.RawData)))
+            certificates.Add(candidate);
     }
 
     public static bool VerifyPinning(HttpRequestMessage request,
@@ -622,19 +742,29 @@ public static partial class ApproovService
         lock (_stateLock) { mutator = _serviceMutator; }
         if (!mutator.HandlePinningShouldProcessRequest(request)) return true;
 
+        return VerifyPinsForHost(request.RequestUri?.Host ?? "", chainCertificates);
+    }
+
+    // Native iOS trust callbacks do not provide the original HttpRequestMessage. Apply
+    // pins directly to the authentication challenge host instead of fabricating a GET
+    // that could cause a request-aware custom mutator to skip pinning incorrectly.
+    internal static bool VerifyPinsForHost(string host,
+        IReadOnlyList<X509Certificate2> chainCertificates)
+    {
+        if (!_sdkInitialized || _isBypassMode) return true;
+
         string? pinsJson = PlatformGetPinsJSON("public-key-sha256");
         // Once the service is initialized, the SDK should always return a JSON pin set.
         // A null/empty result indicates an SDK/state failure; accepting it would silently
         // disable Approov pinning for every host.
         if (string.IsNullOrEmpty(pinsJson)) return false;
 
-        string host = request.RequestUri?.Host ?? "";
         if (string.IsNullOrEmpty(host)) return true;
 
         using var pinsDoc = System.Text.Json.JsonDocument.Parse(pinsJson);
         var root = pinsDoc.RootElement;
         // Host not present in the pin set: this host is not being pinned, so accept.
-        if (!root.TryGetProperty(host, out var pinArray)) return true;
+        if (!TryGetPinsForHost(root, host, out var pinArray)) return true;
 
         // An empty pin list for the host means "use the managed trust roots" published
         // under the "*" entry, if any.
@@ -665,6 +795,40 @@ public static partial class ApproovService
         }
         return false;
     }
+
+    private static bool TryGetPinsForHost(System.Text.Json.JsonElement root,
+        string host, out System.Text.Json.JsonElement pins)
+    {
+        foreach (var property in root.EnumerateObject())
+        {
+            string pattern = property.Name;
+            if (pattern == "*") continue; // managed-root fallback, not a hostname
+            if (string.Equals(pattern, host, StringComparison.OrdinalIgnoreCase)
+                || HostMatchesWildcard(host, pattern))
+            {
+                pins = property.Value;
+                return true;
+            }
+        }
+        pins = default;
+        return false;
+    }
+
+    private static bool HostMatchesWildcard(string host, string pattern)
+    {
+        if (pattern.StartsWith("**.", StringComparison.Ordinal))
+        {
+            string suffix = pattern[3..];
+            return string.Equals(host, suffix, StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith("." + suffix, StringComparison.OrdinalIgnoreCase);
+        }
+        if (!pattern.StartsWith("*.", StringComparison.Ordinal)) return false;
+        string oneLabelSuffix = pattern[2..];
+        string suffixWithDot = "." + oneLabelSuffix;
+        if (!host.EndsWith(suffixWithDot, StringComparison.OrdinalIgnoreCase)) return false;
+        string prefix = host[..^suffixWithDot.Length];
+        return prefix.Length > 0 && !prefix.Contains('.');
+    }
 }
 
 // Failure cache helpers
@@ -672,11 +836,13 @@ public static partial class ApproovService
 {
     private static IApproovTokenFetchResult FetchApproovTokenWithFailureCache(string url)
     {
+        string cacheKey = "token\0" + url;
         ManualResetEventSlim? waitHandle;
         bool isLeader;
         lock (_failureCacheLock)
         {
-            if (_failureCacheResult != null && DateTime.UtcNow < _failureCacheExpiry)
+            if (_failureCacheKey == cacheKey && _failureCacheResult != null
+                && DateTime.UtcNow < _failureCacheExpiry)
                 return _failureCacheResult;
             if (_failureCacheMissGroup != null) { waitHandle = _failureCacheMissGroup; isLeader = false; }
             else { _failureCacheMissGroup = new ManualResetEventSlim(false); waitHandle = null; isLeader = true; }
@@ -686,7 +852,8 @@ public static partial class ApproovService
             waitHandle.Wait();
             lock (_failureCacheLock)
             {
-                if (_failureCacheResult != null && DateTime.UtcNow < _failureCacheExpiry)
+                if (_failureCacheKey == cacheKey && _failureCacheResult != null
+                    && DateTime.UtcNow < _failureCacheExpiry)
                     return _failureCacheResult;
             }
             // The leader's result was not cacheable; fetch our own without owning the
@@ -704,9 +871,14 @@ public static partial class ApproovService
                     double ttl;
                     lock (_stateLock) { ttl = _failureCacheTTL; }
                     _failureCacheResult = result;
+                    _failureCacheKey = cacheKey;
                     _failureCacheExpiry = DateTime.UtcNow.AddSeconds(ttl);
                 }
-                else { _failureCacheResult = null; _failureCacheExpiry = DateTime.MinValue; }
+                else if (_failureCacheKey == cacheKey)
+                {
+                    _failureCacheResult = null; _failureCacheKey = null;
+                    _failureCacheExpiry = DateTime.MinValue;
+                }
             }
             return result;
         }
@@ -725,9 +897,11 @@ public static partial class ApproovService
 
     private static IApproovTokenFetchResult FetchSecureStringWithFailureCache(string key, string? newDef)
     {
+        string cacheKey = "secure\0" + key + "\0" + (newDef ?? "");
         lock (_failureCacheLock)
         {
-            if (_failureCacheResult != null && DateTime.UtcNow < _failureCacheExpiry)
+            if (_failureCacheKey == cacheKey && _failureCacheResult != null
+                && DateTime.UtcNow < _failureCacheExpiry)
                 return _failureCacheResult;
         }
         var result = PlatformFetchSecureStringAndWait(key, newDef);
@@ -739,6 +913,7 @@ public static partial class ApproovService
                 double ttl;
                 lock (_stateLock) { ttl = _failureCacheTTL; }
                 _failureCacheResult = result;
+                _failureCacheKey = cacheKey;
                 _failureCacheExpiry = DateTime.UtcNow.AddSeconds(ttl);
             }
         }

@@ -9,10 +9,9 @@ public static partial class ApproovService
 {
     private static partial bool PlatformInitializeSdk(string config, string? comment)
     {
-        string? initial = config; string? update = null;
-        int ci = config.IndexOf(':');
-        if (ci >= 0) { initial = config[..ci]; update = config[(ci + 1)..]; }
-        bool ok = ApproovNative.Initialize(initial, update, comment, out var err);
+        // Match the React Native service: the supplied configuration is the complete
+        // initial configuration and SDK-managed updates are enabled automatically.
+        bool ok = ApproovNative.Initialize(config, "auto", comment, out var err);
         if (err != null)
             throw new InitializationFailureException(
                 $"Approov SDK init error: {err.LocalizedDescription}");

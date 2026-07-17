@@ -25,27 +25,32 @@ public class ApproovServiceSdkTests : IDisposable
     }
 
     [Fact]
-    public void Precheck_BypassMode_DoesNotThrow()
+    public void Precheck_BypassMode_ThrowsPermanentExceptionWithoutSdkCall()
     {
         ApproovService.Initialize("");
-        ApproovService.Precheck();
+        Assert.Throws<PermanentException>(() => ApproovService.Precheck());
         Assert.Equal(0, ApproovService.FetchCallCount);
+        Assert.Equal(0, ApproovService.SecureStringCallCount);
     }
 
     [Fact]
-    public void Precheck_Initialized_FetchesApproovHost()
+    public void Precheck_Initialized_FetchesDummySecureStringKey()
     {
         ApproovService.Initialize("dummy-config");
+        ApproovService.NextSecureStringResult = new StubTokenFetchResult
+            { Status = ApproovTokenFetchStatus.UnknownKey };
         ApproovService.Precheck();
-        Assert.Equal(1, ApproovService.FetchCallCount);
-        Assert.Equal("approov.io", ApproovService.LastFetchUrl);
+        Assert.Equal(0, ApproovService.FetchCallCount);
+        Assert.Equal(1, ApproovService.SecureStringCallCount);
+        Assert.Equal("precheck-dummy-key", ApproovService.LastSecureStringKey);
+        Assert.Null(ApproovService.LastSecureStringNewDef);
     }
 
     [Fact]
     public void Precheck_Rejected_ThrowsRejectionException()
     {
         ApproovService.Initialize("dummy-config");
-        ApproovService.NextFetchResult = new StubTokenFetchResult
+        ApproovService.NextSecureStringResult = new StubTokenFetchResult
         {
             Status = ApproovTokenFetchStatus.Rejected,
             ARC = "ARC-123",

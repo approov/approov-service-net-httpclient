@@ -11,7 +11,7 @@ You can initialize `ApproovService` with an empty configuration string to use th
 ApproovService.Initialize("");
 ```
 
-When initialized this way, `ApproovHttpClient` behaves like a standard `HttpClient`. It does not perform token injection, message signing, secure string substitution, or TLS pinning. You can upgrade to full Approov protection later in the application lifecycle by calling `Initialize` again with a valid configuration string — the service preserves all other settings during the upgrade.
+When initialized this way, `ApproovHttpClient` behaves like a standard `HttpClient`. It does not perform token injection, message signing, secure string substitution, or TLS pinning. You can upgrade to full Approov protection later by calling `Initialize` again with a valid configuration string. A configuration change restores the request settings to their defaults but preserves the active service mutator; repeating the same non-empty configuration preserves all runtime settings.
 
 Use `ApproovService.IsApproovEnabled()` to check at runtime whether Approov is actively protecting requests:
 
@@ -40,18 +40,18 @@ else
 
 ### Default Behavior
 
-By default, `ApproovService` processes requests using the Approov SDK to obtain a signed JWT attestation token. The token is typically returned immediately; a network connection to Approov is required on first launch or when the token nears expiry. The default action for each fetch status is:
+By default, `ApproovService` obtains a signed JWT attestation token and then attempts RFC 9421 installation message signing. The token is typically returned immediately; a network connection to Approov is required on first launch or when the token nears expiry. The default action for each fetch status is:
 
 | Approov Fetch Status | Action | Result |
 | :--- | :--- | :--- |
-| **Success** | Proceed | Request sent with `Approov-Token` header. |
+| **Success** | Proceed | Request sent with `Approov-Token`; installation signing is attempted. |
 | **No Network / Poor Network / MITM Detected** | Throw `NetworkingErrorException` | Request should be retried. |
 | **Rejection** | Throw `RejectionException` | Request rejected; check ARC and reasons. |
 | **No Approov Service / Unknown URL / Unprotected URL** | Proceed | Request sent without `Approov-Token`. |
 
 ### Customizing Request Handling
 
-Subclass `ApproovServiceMutatorDefault` and override the methods you need:
+Subclass `ApproovServiceMutatorDefault` and override only the methods you need:
 
 ```csharp
 public class MyMutator : ApproovServiceMutatorDefault
@@ -75,15 +75,17 @@ ApproovService.Initialize("<your-config-string>");
 ApproovService.SetServiceMutator(new MyMutator());
 ```
 
+Installing a custom mutator replaces the automatic message-signing mutator. If custom policy must retain signing, subclass `ApproovDefaultMessageSigning`, configure its default factory in the constructor, and override the required virtual callbacks.
+
 ## Sending the Fetch Status as a Token
 
-When Approov cannot obtain a token (e.g. `NoNetwork`), the default behavior throws a `NetworkingErrorException` causing `ApproovMessageHandler` to return HTTP 503. If you prefer the request to proceed and carry the failure reason in the token header, enable `SetUseApproovStatusIfNoToken`:
+When Approov cannot obtain a token because of a network condition, the default behavior throws a retryable `NetworkingErrorException`; no synthetic HTTP response is created. To let a custom mutator continue and carry the failure status in the token header, enable `SetUseApproovStatusIfNoToken`:
 
 ```csharp
 ApproovService.SetUseApproovStatusIfNoToken(true);
 ```
 
-With this enabled, on network failure the header will contain a value like `"NoNetwork"` instead of a real token. Your backend can then decide how to handle it. This setting works together with a custom mutator — if a mutator throws for a given status, the status string is still injected and the request proceeds.
+This setting does not override a mutator failure. If the mutator permits processing to continue, the header contains the SDK-style status, such as `NO_NETWORK` or `NO_APPROOV_SERVICE`, and participates in message signing. If the mutator throws or returns `false`, the status is not injected.
 
 ## Token Binding Header
 
@@ -93,7 +95,7 @@ Bind a specific request header's value into the Approov token to tie the token t
 ApproovService.SetBindingHeader("Authorization");
 ```
 
-On each request, the value of the `Authorization` header is hashed into the token. The backend can verify that the token was issued for that specific credential. Requests without the binding header proceed normally without the hash.
+When the header is present, its complete serialized value is hashed into the token. The backend can verify that the token was issued for that credential. The header is optional; when it is absent, the service does not change the SDK's current data hash.
 
 ## Secure String Substitution
 
@@ -115,8 +117,8 @@ Use `AddExclusionURLRegex(name, pattern)` to exclude URLs from substitution (e.g
 
 ## HTTP Message Signing
 
-HTTP message signing is provided by `ApproovDefaultMessageSigning`, registered as the service
-mutator. It adds RFC 9421 `Signature` / `Signature-Input` headers to every request that already
+HTTP message signing is provided by `ApproovDefaultMessageSigning`, which is installed automatically
+as the initial service mutator. It adds RFC 9421 `Signature` / `Signature-Input` headers to requests that already
 carries an Approov token (requests without a token are never signed). Two modes are supported:
 
 - **Install signing** — `alg="ecdsa-p256-sha256"`, signature id `install` (the default). Signed
@@ -124,15 +126,14 @@ carries an Approov token (requests without a token are never signed). Two modes 
   raw R‖S (64 byte) form required by RFC 9421 §3.3.4.
 - **Account signing** — `alg="hmac-sha256"`, signature id `account`. Signed with the account key.
 
-Register the default configuration — install signing over `@method`, `@target-uri`, the Approov
-token header and trace-ID header, optional `Authorization`/`Content-Length`/`Content-Type` when
-present, plus `created` and a 15-second `expires`:
+The default configuration requires no additional registration. It uses install signing over
+`@method`, `@target-uri`, the Approov token header and trace-ID header, optional
+`Authorization`/`Content-Length`/`Content-Type` when present, plus `created` and a 15-second
+`expires`:
 
 ```csharp
 ApproovService.Initialize("<your-config-string>");
-ApproovService.SetServiceMutator(
-    new ApproovDefaultMessageSigning().SetDefaultFactory(
-        ApproovDefaultMessageSigning.GenerateDefaultSignatureParametersFactory()));
+var client = new ApproovHttpClient();
 ```
 
 Customize what is covered with a `SignatureParametersFactory`, and vary it per host:
@@ -158,28 +159,35 @@ ApproovService.SetServiceMutator(
         .PutHostFactory("api.example.com", otherFactory));
 ```
 
-Signing is **fail-open**: if the SDK cannot provide a signature the request proceeds unsigned.
+Signing is **fail-open**: if the SDK cannot provide a signature the request proceeds unsigned. Calling `SetServiceMutator(null)` installs the base mutator and therefore disables automatic signing.
+
+Redirects re-enter token and signing processing for the target URI. Secure-string substitution is performed only on the initial request so an already-resolved secret is not used as a second lookup key. On a cross-origin redirect, authorization, binding, cookie, substitution headers, and configured substitution query parameters are removed conservatively—even when the target `Location` explicitly contains one of those query-parameter names.
 
 ## Body Digest
 
-When message signing is active, the `Content-Digest` header is automatically computed for POST, PUT, and PATCH requests (SHA-256 of the body in `sha-256=:<base64>:` format) and added before signing, so signers can include `content-digest` as a component:
+The automatically installed signer computes a SHA-256 `Content-Digest` for a protected request with a non-empty, replayable body and covers it in the signature:
 
 ```csharp
 // Enabled by default — disable if not needed
 ApproovService.SetBodyDigestEnabled(false);
 ```
 
-Body digest is computed asynchronously in `ApproovMessageHandler.SendAsync` before `UpdateRequestWithApproov` is called, preserving the synchronous contract of the core service.
+Digest generation occurs inside the signer, so bypassed and unprotected requests are not modified. Required mode can be selected with `SetBodyDigestEnabled(true, required: true)`; a missing, empty, unknown-length, or otherwise non-replayable body then fails the request. When using a custom signing factory, configure its digest directly with `SetBodyDigestConfig`.
 
 ## TLS Certificate Pinning
 
-`ApproovMessageHandler` wires TLS pinning automatically via `ServerCertificateCustomValidationCallback`. The pins are managed by the Approov cloud and updated dynamically — no app update required when pins rotate.
+`ApproovMessageHandler` wires TLS pinning automatically. Android preserves the platform callback's certificate validation and checks the complete peer chain. iOS evaluates the original native `SecTrust` and then checks the complete native chain, avoiding a second managed revocation policy. Pins are managed by the Approov cloud and updated dynamically.
 
-If you build a custom `HttpMessageHandler`, use `ApproovService.VerifyServerTrust` as its certificate validation callback:
+If you supply an Android `HttpClientHandler`, use `VerifyServerTrust` and disable automatic redirects so every target is retokenized and resigned:
 
 ```csharp
-handler.ServerCertificateCustomValidationCallback = ApproovService.VerifyServerTrust;
+handler.AllowAutoRedirect = false;
+handler.ServerCertificateCustomValidationCallback =
+    (message, cert, chain, errors) =>
+        ApproovService.VerifyServerTrust(message, cert, chain, errors);
 ```
+
+The default constructor is recommended on iOS because it has access to the original native trust object. The custom-handler constructor disables redirects for supported platform handlers and rejects handlers whose redirect behavior cannot be controlled. For another terminal-handler type, first disable its redirects and use `new ApproovMessageHandler(handler, automaticRedirectsAlreadyDisabled: true)` to acknowledge that security requirement explicitly.
 
 ## Failure Cache
 

@@ -12,6 +12,8 @@
     <PackageProjectUrl>https://approov.io</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>Approov API-Protection Security iOS MAUI</PackageTags>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <TargetPlatformVersion>18.0</TargetPlatformVersion>
   </PropertyGroup>
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="/" />
