@@ -124,6 +124,47 @@ public class ApproovDefaultMessageSigningTests : IDisposable
     }
 
     [Fact]
+    public void InstallMode_InvalidBase64_FailsOpenAndRemovesStaleSignatureHeaders()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.InstallSignatureResult = "not base64";
+        var (signer, req, changes) = Setup(MinimalFactory(account: false));
+        req.Headers.TryAddWithoutValidation("Signature", "stale=:AA==:");
+        req.Headers.TryAddWithoutValidation("Signature-Input", "stale=();created=1");
+
+        var result = signer.HandleInterceptorProcessedRequest(req, changes);
+
+        Assert.False(result.Headers.Contains("Signature"));
+        Assert.False(result.Headers.Contains("Signature-Input"));
+    }
+
+    [Fact]
+    public void InstallMode_InvalidDer_FailsOpen()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.InstallSignatureResult = Convert.ToBase64String(new byte[] { 1, 2, 3 });
+        var (signer, req, changes) = Setup(MinimalFactory(account: false));
+
+        var result = signer.HandleInterceptorProcessedRequest(req, changes);
+
+        Assert.False(result.Headers.Contains("Signature"));
+        Assert.False(result.Headers.Contains("Signature-Input"));
+    }
+
+    [Fact]
+    public void AccountMode_SdkException_FailsOpen()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.AccountSignatureException = new InvalidOperationException("SDK unavailable");
+        var (signer, req, changes) = Setup(MinimalFactory(account: true));
+
+        var result = signer.HandleInterceptorProcessedRequest(req, changes);
+
+        Assert.False(result.Headers.Contains("Signature"));
+        Assert.False(result.Headers.Contains("Signature-Input"));
+    }
+
+    [Fact]
     public void DefaultFactory_CoversMethodTargetUriAndApproovTokenWithCreatedExpires()
     {
         ApproovService.Initialize("dummy-config");

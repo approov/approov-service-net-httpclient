@@ -19,6 +19,9 @@
 - Redirects are processed explicitly so every target is retokenized/resigned and cross-origin credentials are stripped.
 - iOS TLS validation now evaluates the original native `SecTrust`; Android pinning checks the callback's complete peer chain, including `ExtraStore` intermediates.
 - `ApproovServiceMutatorDefault` and `ApproovDefaultMessageSigning` callbacks are virtual for selective custom policy overrides.
+- Operational message-signing failures now consistently fail open and remove stale signature headers; unsupported algorithms and required body-digest failures remain fail closed.
+- `SetServiceMutator(null)` now restores the automatic default signing mutator. Install `ApproovServiceMutatorDefault.Shared` explicitly to disable signing.
+- Added the common single-argument `AddExclusionURLRegex(pattern)` API while retaining the named overload for compatibility.
 
 ### Removed
 - Inheritance-based `ApproovService` (replaced with a static `partial class`).

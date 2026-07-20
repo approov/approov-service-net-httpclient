@@ -269,8 +269,16 @@ public static partial class ApproovService
     {
         lock (_stateLock)
         {
-            _serviceMutator = mutator ?? ApproovServiceMutatorDefault.Shared;
-            _isInitialServiceMutator = false;
+            if (mutator == null)
+            {
+                _serviceMutator = CreateInitialServiceMutator();
+                _isInitialServiceMutator = true;
+            }
+            else
+            {
+                _serviceMutator = mutator;
+                _isInitialServiceMutator = false;
+            }
         }
     }
 
@@ -362,6 +370,11 @@ public static partial class ApproovService
             _exclusionURLRegexs[name] = new Regex(pattern, RegexOptions.Compiled);
         }
     }
+
+    // Common service-layer API. The pattern is also a stable removal key; retain the
+    // named overload above for source compatibility with existing MAUI consumers.
+    public static void AddExclusionURLRegex(string pattern)
+        => AddExclusionURLRegex(pattern, pattern);
 
     public static void RemoveExclusionURLRegex(string name)
     {

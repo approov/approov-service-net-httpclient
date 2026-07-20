@@ -14,12 +14,12 @@
 |--------|-------------|
 | `SetApproovTokenHeader(header, prefix)` | Change the token header name/prefix (default: `Approov-Token`, `""`). |
 | `SetApproovTraceIDHeader(header?)` | Set the trace ID header (default: `Approov-TraceID`). `null` disables it. |
-| `SetBindingHeader(header?)` | Hash this request header's serialized value into the token when the header is present. |
+| `SetBindingHeader(header?)` | Hash this request header's serialized value into the token when present. A missing header does not change the SDK's persistent binding value. |
 | `SetBodyDigestEnabled(bool enabled)` | Configure SHA-256 `Content-Digest` generation in the automatically installed signer. Enabled and optional by default. Equivalent to `SetBodyDigestEnabled(enabled, false)`. Custom signing factories must use `SetBodyDigestConfig` directly. |
 | `SetBodyDigestEnabled(bool enabled, bool required)` | As above, with strict mode. If enabled and required, failure to generate a digest—including a missing, empty, unknown-length, or non-replayable body—fails the request. Same-config initialization preserves this setting; a different config restores enabled/optional defaults. |
 | `SetFailureCacheTTL(seconds)` | Failure cache TTL (default: 5.0 s). |
 | `SetLoggingLevel(level)` | `Off/Error/Warning/Info/Debug` (default: `Info`). |
-| `SetServiceMutator(mutator)` | Replace the callback handler (initially an `ApproovDefaultMessageSigning` instance). Pass `null` to install `ApproovServiceMutatorDefault.Shared`, which retains base fail-closed policy but performs no message signing. Both provided mutator classes expose virtual callbacks for selective customization. |
+| `SetServiceMutator(mutator)` | Replace the callback handler (initially an `ApproovDefaultMessageSigning` instance). Pass `null` to restore a newly configured default signing mutator. Install `ApproovServiceMutatorDefault.Shared` explicitly to disable signing. Both provided mutator classes expose virtual callbacks for selective customization. |
 
 ## Substitution
 
@@ -29,15 +29,16 @@
 | `RemoveSubstitutionHeader(header)` | Remove substitution. |
 | `AddSubstitutionQueryParam(key)` | Substitute query param value with secure string. |
 | `RemoveSubstitutionQueryParam(key)` | Remove substitution. |
-| `AddExclusionURLRegex(name, pattern)` | Exclude URLs matching the regex `pattern` from Approov request mutation. `name` is a key used to remove the entry later via `RemoveExclusionURLRegex(name)`. **Note:** this service layer uses a two-argument form (name + pattern); the common interface spec shows a single-argument form. The extra `name` argument is required here because entries are stored in a dictionary keyed by name. |
-| `RemoveExclusionURLRegex(name)` | Remove exclusion. |
+| `AddExclusionURLRegex(pattern)` | Exclude matching URLs from Approov request mutation. The pattern is also the removal key. |
+| `AddExclusionURLRegex(name, pattern)` | Compatibility overload that registers the pattern under an explicit removal key. |
+| `RemoveExclusionURLRegex(nameOrPattern)` | Remove an exclusion using its explicit name or single-argument pattern. |
 
 ## SDK operations
 
 | Method | Description |
 |--------|-------------|
 | `Precheck()` | Perform an attestation precheck through a dummy secure-string lookup; `UNKNOWN_KEY` is a successful precheck result. Bypass mode fails with `PermanentException`. |
-| `FetchApproovToken(url)` | Fetch token for a URL. |
+| `FetchApproovToken(url)` | Fetch a token for a URL. Tokens are short-lived request artifacts and must never be cached by the application. |
 | `FetchSecureString(key, newDef?)` | Fetch/update a secure string. |
 | `FetchCustomJWT(payload)` | Fetch a custom JWT. In bypass mode returns a `Disabled` result without calling the SDK. |
 | `GetDeviceID()` | Returns the Approov device ID (`null` in bypass mode). |
@@ -78,8 +79,8 @@ Algorithms and signature ids:
 
 Failure contract:
 
-- **Fail-open** — if the SDK cannot provide a signature (`GetInstallMessageSignature` /
-  `GetAccountMessageSignature` returns `null`/empty), or no factory is configured, the request
-  proceeds without `Signature`/`Signature-Input` headers.
-- **Fail-closed** — any exception raised while signing (DER decode error, serialization failure,
-  unsupported `alg`, or a missing required `Content-Digest`) propagates as a request failure.
+- **Fail-open** — if the SDK cannot provide a signature, throws while signing, returns malformed
+  Base64/DER, or signature serialization fails, the error is logged and the request proceeds with
+  no `Signature`/`Signature-Input` headers. No configured factory also leaves the request unsigned.
+- **Fail-closed** — an unsupported signing algorithm or failure to create a required
+  `Content-Digest` propagates and aborts the request.

@@ -59,4 +59,17 @@ public class ApproovServiceSubstitutionTests : IDisposable
         ApproovService.RemoveExclusionURLRegex("internal");
         Assert.False(ApproovService.GetExclusionURLRegexs().ContainsKey("internal"));
     }
+
+    [Fact]
+    public void AddExclusionURLRegex_CommonOverload_UsesPatternAsRemovalKey()
+    {
+        const string pattern = @"https://internal\.example\.com/.*";
+        ApproovService.Initialize("");
+        ApproovService.AddExclusionURLRegex(pattern);
+
+        Assert.True(ApproovService.GetExclusionURLRegexs().ContainsKey(pattern));
+
+        ApproovService.RemoveExclusionURLRegex(pattern);
+        Assert.False(ApproovService.GetExclusionURLRegexs().ContainsKey(pattern));
+    }
 }

@@ -31,6 +31,9 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
     private readonly Dictionary<string, SignatureParametersFactory> _hostFactories =
         new(StringComparer.OrdinalIgnoreCase);
 
+    private const string REQUIRED_BODY_DIGEST_ERROR = "Failed to create required body digest";
+    private const string UNSUPPORTED_ALGORITHM_ERROR = "Unsupported algorithm identifier: ";
+
     public ApproovDefaultMessageSigning SetDefaultFactory(SignatureParametersFactory factory)
     {
         _defaultFactory = factory;
@@ -86,57 +89,76 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
         if (factory == null)
             return request;
 
-        SignatureParameters sigParams = factory.BuildSignatureParameters(request, changes);
-
-        var provider = new ApproovHttpMessageComponentProvider(request);
-        string message = SignatureBaseBuilder.Build(sigParams, provider);
-        // WARNING: never log `message` in production - it contains the Approov token.
-
-        string alg = sigParams.GetParameterValue("alg") as string
-            ?? throw new InvalidOperationException("Signature parameters are missing the alg parameter");
-
-        string sigId;
-        byte[] signature;
-        switch (alg)
+        try
         {
-            case ALG_ES256:
+            SignatureParameters sigParams = factory.BuildSignatureParameters(request, changes);
+
+            var provider = new ApproovHttpMessageComponentProvider(request);
+            string message = SignatureBaseBuilder.Build(sigParams, provider);
+            // WARNING: never log `message` in production - it contains the Approov token.
+
+            string alg = sigParams.GetParameterValue("alg") as string
+                ?? throw new InvalidOperationException(
+                    "Signature parameters are missing the alg parameter");
+
+            string sigId;
+            byte[] signature;
+            switch (alg)
             {
-                sigId = "install";
-                string? base64 = Approov.ApproovService.GetInstallMessageSignature(message);
-                if (string.IsNullOrEmpty(base64))
+                case ALG_ES256:
                 {
-                    Approov.ApproovService.Log(Approov.ApproovLogLevel.Debug,
-                        "message signing: no install signature available - skipping");
-                    return request; // fail-open
+                    sigId = "install";
+                    string? base64 = Approov.ApproovService.GetInstallMessageSignature(message);
+                    if (string.IsNullOrEmpty(base64))
+                        return FailOpen(request, "no install signature available");
+                    // The SDK returns base64 ASN.1 DER; RFC 9421 §3.3.4 requires raw R||S.
+                    signature = DerEcdsaToRaw(Convert.FromBase64String(base64));
+                    break;
                 }
-                // The SDK returns base64 ASN.1 DER; RFC 9421 §3.3.4 requires raw R||S.
-                signature = DerEcdsaToRaw(Convert.FromBase64String(base64));
-                break;
-            }
-            case ALG_HS256:
-            {
-                sigId = "account";
-                string? base64 = Approov.ApproovService.GetAccountMessageSignature(message);
-                if (string.IsNullOrEmpty(base64))
+                case ALG_HS256:
                 {
-                    Approov.ApproovService.Log(Approov.ApproovLogLevel.Debug,
-                        "message signing: no account signature available - skipping");
-                    return request; // fail-open
+                    sigId = "account";
+                    string? base64 = Approov.ApproovService.GetAccountMessageSignature(message);
+                    if (string.IsNullOrEmpty(base64))
+                        return FailOpen(request, "no account signature available");
+                    signature = Convert.FromBase64String(base64);
+                    break;
                 }
-                signature = Convert.FromBase64String(base64);
-                break;
+                default:
+                    throw new InvalidOperationException(UNSUPPORTED_ALGORITHM_ERROR + alg);
             }
-            default:
-                throw new InvalidOperationException("Unsupported algorithm identifier: " + alg);
+
+            string sigHeader = SFV.SerializeDictionary(sigId, signature);
+            string sigInputHeader =
+                $"{sigId}={SignatureBaseBuilder.BuildSignatureParamsValue(sigParams)}";
+
+            request.Headers.Remove("Signature");
+            request.Headers.Remove("Signature-Input");
+            request.Headers.TryAddWithoutValidation("Signature-Input", sigInputHeader);
+            request.Headers.TryAddWithoutValidation("Signature", sigHeader);
+            return request;
         }
+        catch (InvalidOperationException exception) when (
+            exception.Message == REQUIRED_BODY_DIGEST_ERROR
+            || exception.Message.StartsWith(
+                UNSUPPORTED_ALGORITHM_ERROR, StringComparison.Ordinal))
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // Signing is enforced by the backend. Operational SDK, encoding and
+            // serialization failures must not prevent the request from being sent.
+            return FailOpen(request, $"{exception.GetType().Name}");
+        }
+    }
 
-        string sigHeader = SFV.SerializeDictionary(sigId, signature);
-        string sigInputHeader = $"{sigId}={SignatureBaseBuilder.BuildSignatureParamsValue(sigParams)}";
-
+    private static HttpRequestMessage FailOpen(HttpRequestMessage request, string reason)
+    {
         request.Headers.Remove("Signature");
         request.Headers.Remove("Signature-Input");
-        request.Headers.TryAddWithoutValidation("Signature-Input", sigInputHeader);
-        request.Headers.TryAddWithoutValidation("Signature", sigHeader);
+        Approov.ApproovService.Log(Approov.ApproovLogLevel.Error,
+            $"message signing failed; proceeding unsigned ({reason})");
         return request;
     }
 
@@ -274,7 +296,7 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
                 if (TryGenerateBodyDigest(request, _bodyDigestAlgorithm))
                     p.AddComponentIdentifier(new StringItem("content-digest"));
                 else if (_bodyDigestRequired)
-                    throw new InvalidOperationException("Failed to create required body digest");
+                    throw new InvalidOperationException(REQUIRED_BODY_DIGEST_ERROR);
             }
 
             return p;

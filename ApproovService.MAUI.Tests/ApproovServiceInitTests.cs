@@ -89,7 +89,7 @@ public class ApproovServiceInitTests : IDisposable
     {
         ApproovService.SetServiceMutator(new NoOpMutator());
         ApproovService.SetServiceMutator(null);
-        Assert.Same(ApproovServiceMutatorDefault.Shared, ApproovService.GetServiceMutator());
+        Assert.IsType<ApproovDefaultMessageSigning>(ApproovService.GetServiceMutator());
     }
 
     private sealed class NoOpMutator : IApproovServiceMutator

@@ -95,7 +95,16 @@ Bind a specific request header's value into the Approov token to tie the token t
 ApproovService.SetBindingHeader("Authorization");
 ```
 
-When the header is present, its complete serialized value is hashed into the token. The backend can verify that the token was issued for that credential. The header is optional; when it is absent, the service does not change the SDK's current data hash.
+When the header is present, its complete serialized value is hashed into the token. The backend can verify that the token was issued for that credential. Approov binding is persistent native SDK state: once a `pay` claim has been enabled in a running app it can be changed, but not removed. A request missing the configured header therefore leaves the current binding unchanged. Applications should configure automatic binding only for a header that is consistently present throughout the protected session.
+
+For manual binding outside automatic request processing:
+
+```csharp
+ApproovService.SetDataHashInToken("order-123");
+var tokenResult = ApproovService.FetchApproovToken("https://api.example.com/orders");
+```
+
+Do not combine manual `SetDataHashInToken` calls with `SetBindingHeader`. Both use the same persistent native SDK state, and automatic request processing replaces that state whenever the configured header is present.
 
 ## Secure String Substitution
 
@@ -113,7 +122,7 @@ await client.SendAsync(req); // X-Api-Key is replaced with the live secret
 
 Register query parameters for substitution with `AddSubstitutionQueryParam`. Remove registrations with `RemoveSubstitutionHeader` / `RemoveSubstitutionQueryParam`.
 
-Use `AddExclusionURLRegex(name, pattern)` to exclude URLs from substitution (e.g. health check endpoints).
+Use `AddExclusionURLRegex(pattern)` to exclude URLs from substitution (e.g. health check endpoints). The named `AddExclusionURLRegex(name, pattern)` compatibility overload is also available.
 
 ## HTTP Message Signing
 
@@ -159,7 +168,13 @@ ApproovService.SetServiceMutator(
         .PutHostFactory("api.example.com", otherFactory));
 ```
 
-Signing is **fail-open**: if the SDK cannot provide a signature the request proceeds unsigned. Calling `SetServiceMutator(null)` installs the base mutator and therefore disables automatic signing.
+Signing is **fail-open** for operational failures: if the SDK cannot provide a signature or throws, or Base64/DER conversion or signature serialization fails, the error is logged and the request proceeds without signature headers. Unsupported algorithms and failure to create an explicitly required body digest remain fail-closed.
+
+Calling `SetServiceMutator(null)` restores a newly configured default signing mutator. To disable automatic signing explicitly, install the base mutator:
+
+```csharp
+ApproovService.SetServiceMutator(ApproovServiceMutatorDefault.Shared);
+```
 
 Redirects re-enter token and signing processing for the target URI. Secure-string substitution is performed only on the initial request so an already-resolved secret is not used as a second lookup key. On a cross-origin redirect, authorization, binding, cookie, substitution headers, and configured substitution query parameters are removed conservatively—even when the target `Location` explicitly contains one of those query-parameter names.
 

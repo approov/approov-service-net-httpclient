@@ -51,6 +51,8 @@ public static partial class ApproovService
     internal static int InstallSignatureCallCount = 0;
     internal static string? AccountSignatureResult = null;
     internal static string? InstallSignatureResult = null;
+    internal static Exception? AccountSignatureException = null;
+    internal static Exception? InstallSignatureException = null;
     internal static string? LastAccountSignatureMessage = null;
     internal static string? LastInstallSignatureMessage = null;
     internal static string? FetchConfigResult = null;
@@ -96,6 +98,8 @@ public static partial class ApproovService
         InstallSignatureCallCount = 0;
         AccountSignatureResult = null;
         InstallSignatureResult = null;
+        AccountSignatureException = null;
+        InstallSignatureException = null;
         LastAccountSignatureMessage = null;
         LastInstallSignatureMessage = null;
         FetchConfigResult = null;
@@ -178,6 +182,12 @@ public static partial class ApproovService
     {
         AccountSignatureCallCount++;
         LastAccountSignatureMessage = message;
+        if (AccountSignatureException != null)
+        {
+            var exception = AccountSignatureException;
+            AccountSignatureException = null;
+            throw exception;
+        }
         return AccountSignatureResult;
     }
 
@@ -185,6 +195,12 @@ public static partial class ApproovService
     {
         InstallSignatureCallCount++;
         LastInstallSignatureMessage = message;
+        if (InstallSignatureException != null)
+        {
+            var exception = InstallSignatureException;
+            InstallSignatureException = null;
+            throw exception;
+        }
         return InstallSignatureResult;
     }
 
