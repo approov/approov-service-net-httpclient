@@ -300,6 +300,13 @@ public static partial class ApproovService
         lock (_stateLock) { return new Dictionary<string, Regex>(_exclusionURLRegexs); }
     }
 
+#if APPROOV_TESTING
+    // Resets every piece of service-layer state, including _sdkInitialized. Both TLS entry
+    // points (VerifyPinning, VerifyPinsForHost) accept any certificate while uninitialized,
+    // so this method disables token injection and certificate pinning process-wide in a
+    // single call. It must never be reachable in a shipped build, in any configuration:
+    // APPROOV_TESTING is defined only by ApproovService.MAUI.Tests.csproj. Do not relax this
+    // to #if DEBUG, because the unit suite is also run in Release.
     internal static void ResetForTesting()
     {
         lock (_initLock) lock (_stateLock) lock (_loggingLock) lock (_failureCacheLock)
@@ -319,6 +326,7 @@ public static partial class ApproovService
             _failureCacheTTL = 5.0; _failureCacheMissGroup = null;
         }
     }
+#endif
 }
 
 public static partial class ApproovService

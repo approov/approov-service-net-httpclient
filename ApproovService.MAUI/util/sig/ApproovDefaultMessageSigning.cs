@@ -225,8 +225,13 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
         private bool _addApproovTraceIDHeader;
         private readonly List<string> _optionalHeaders = new();
 
-        // Test seam so created/expires are deterministic in unit tests.
+#if APPROOV_TESTING
+        // Test seam so created/expires are deterministic in unit tests. Compiled only when
+        // APPROOV_TESTING is defined, which the test project does and no shipped build does.
         internal Func<long> NowSeconds { get; set; } = () => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+#else
+        private static long NowSeconds() => DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+#endif
 
         public SignatureParametersFactory SetBaseParameters(SignatureParameters baseParameters)
         {

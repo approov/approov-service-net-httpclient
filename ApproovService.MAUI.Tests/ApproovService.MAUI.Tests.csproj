@@ -6,6 +6,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <!-- Exposes internal test seams (ApproovService.ResetForTesting,
+         SignatureParametersFactory.NowSeconds) to the unit suite only. This symbol is
+         deliberately NOT defined by ApproovService.MAUI.csproj, so those members are absent
+         from every shipped build in every configuration, Debug and Release alike. -->
+    <DefineConstants>$(DefineConstants);APPROOV_TESTING</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit" Version="2.9.0" />
