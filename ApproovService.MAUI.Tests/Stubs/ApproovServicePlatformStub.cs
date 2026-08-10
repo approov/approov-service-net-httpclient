@@ -66,8 +66,16 @@ public static partial class ApproovService
     // When true, public-key extraction fails for every certificate (cannot pin it).
     internal static bool ExtractReturnsNull = false;
 
+    // Captures everything written through ApproovService.Log so tests can assert that a
+    // fail-open path is actually reported rather than proceeding silently.
+    internal static ConcurrentQueue<string> LogLines = new();
+
+    private static partial void PlatformLog(ApproovLogLevel level, string message)
+        => LogLines.Enqueue($"[{level}] {message}");
+
     internal static void ResetPlatformStub()
     {
+        LogLines = new();
         NextFetchResult = null;
         FetchCallCount = 0;
         LastFetchUrl = null;

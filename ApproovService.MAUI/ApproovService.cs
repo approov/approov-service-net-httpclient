@@ -68,6 +68,9 @@ public static partial class ApproovService
     private static partial string? PlatformGetPinsJSON(string pinType);
     private static partial string? PlatformFetchConfig();
     private static partial byte[]? PlatformExtractPublicKeyBytes(X509Certificate2 cert);
+    // Writes to the platform log (logcat on Android, the device console on iOS). Must not
+    // be compiled out of release builds.
+    private static partial void PlatformLog(ApproovLogLevel level, string message);
 
     // Bypass result — returned for any SDK call in bypass mode
     private sealed record BypassFetchResult(ApproovTokenFetchStatus Status) : IApproovTokenFetchResult
@@ -182,8 +185,13 @@ public static partial class ApproovService
     {
         ApproovLogLevel current;
         lock (_loggingLock) { current = _loggingLevel; }
+        // Dispatched to a platform sink rather than System.Diagnostics.Debug.WriteLine,
+        // which is [Conditional("DEBUG")] and so was erased from every release build: the
+        // shipped package logged nothing at all and SetLoggingLevel had no effect. Every
+        // fail-open path in this layer reports through here, so losing it in release meant
+        // losing all visibility of requests that proceeded without Approov protection.
         if (level <= current)
-            System.Diagnostics.Debug.WriteLine($"[Approov] [{level}] {message}");
+            PlatformLog(level, message);
     }
 
     public static void SetApproovTokenHeader(string header, string prefix = "")

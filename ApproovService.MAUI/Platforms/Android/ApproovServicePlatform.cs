@@ -84,6 +84,20 @@ public static partial class ApproovService
             return null;
         }
     }
+
+    // Routed to logcat so the messages survive a release build and are visible with
+    // `adb logcat -s Approov`.
+    private static partial void PlatformLog(ApproovLogLevel level, string message)
+    {
+        const string tag = "Approov";
+        switch (level)
+        {
+            case ApproovLogLevel.Error: Android.Util.Log.Error(tag, message); break;
+            case ApproovLogLevel.Warning: Android.Util.Log.Warn(tag, message); break;
+            case ApproovLogLevel.Info: Android.Util.Log.Info(tag, message); break;
+            default: Android.Util.Log.Debug(tag, message); break;
+        }
+    }
 }
 
 internal sealed class AndroidTokenFetchResult : IApproovTokenFetchResult

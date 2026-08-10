@@ -68,6 +68,11 @@ public static partial class ApproovService
             return null;
         }
     }
+
+    // Console.WriteLine reaches the device log on iOS and, unlike Debug.WriteLine, is not
+    // compiled out of release builds.
+    private static partial void PlatformLog(ApproovLogLevel level, string message)
+        => Console.WriteLine($"[Approov] [{level}] {message}");
 }
 
 internal sealed class iOSTokenFetchResult : IApproovTokenFetchResult
