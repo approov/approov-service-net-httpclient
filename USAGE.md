@@ -170,6 +170,15 @@ ApproovService.SetServiceMutator(
 
 Signing is **fail-open** for operational failures: if the SDK cannot provide a signature or throws, or Base64/DER conversion or signature serialization fails, the error is logged and the request proceeds without signature headers. Unsupported algorithms and failure to create an explicitly required body digest remain fail-closed.
 
+> **Initialization resets the mutator.** Every successful `ApproovService.Initialize` call,
+> including one made with the same configuration, discards a custom mutator and restores the
+> default, along with the token header, trace header, binding header, substitutions and
+> exclusion regexes. Apply your configuration *after* initializing, and reapply it if you
+> initialize again. A discarded custom mutator or binding header is logged at warning level.
+> This matches the React Native service layer, where a custom mutator participates in
+> rejection and substitution decisions and so must not outlive the initialization it was
+> scoped to.
+
 Calling `SetServiceMutator(null)` restores a newly configured default signing mutator. To disable automatic signing explicitly, install the base mutator:
 
 ```csharp

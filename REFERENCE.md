@@ -16,10 +16,10 @@
 | `SetApproovTraceIDHeader(header?)` | Set the trace ID header (default: `Approov-TraceID`). `null` disables it. |
 | `SetBindingHeader(header?)` | Hash this request header's serialized value into the token when present. A missing header does not change the SDK's persistent binding value. |
 | `SetBodyDigestEnabled(bool enabled)` | Configure SHA-256 `Content-Digest` generation in the automatically installed signer. Enabled and optional by default. Equivalent to `SetBodyDigestEnabled(enabled, false)`. Custom signing factories must use `SetBodyDigestConfig` directly. |
-| `SetBodyDigestEnabled(bool enabled, bool required)` | As above, with strict mode. If enabled and required, failure to generate a digest—including a missing, empty, unknown-length, or non-replayable body—fails the request. Same-config initialization preserves this setting; a different config restores enabled/optional defaults. |
+| `SetBodyDigestEnabled(bool enabled, bool required)` | As above, with strict mode. If enabled and required, failure to generate a digest—including a missing, empty, unknown-length, or non-replayable body—fails the request. Every successful initialization restores the enabled/optional defaults, including a same-config one. |
 | `SetFailureCacheTTL(seconds)` | Failure cache TTL (default: 5.0 s). |
 | `SetLoggingLevel(level)` | `Off/Error/Warning/Info/Debug` (default: `Info`). |
-| `SetServiceMutator(mutator)` | Replace the callback handler (initially an `ApproovDefaultMessageSigning` instance). Pass `null` to restore a newly configured default signing mutator. Install `ApproovServiceMutatorDefault.Shared` explicitly to disable signing. Both provided mutator classes expose virtual callbacks for selective customization. |
+| `SetServiceMutator(mutator)` | Replace the callback handler (initially an `ApproovDefaultMessageSigning` instance). **Every successful `Initialize` call discards a custom mutator and restores the default, including a same-config re-initialization; reinstall it after initializing.** Pass `null` to restore a newly configured default signing mutator. Install `ApproovServiceMutatorDefault.Shared` explicitly to disable signing. Both provided mutator classes expose virtual callbacks for selective customization. |
 
 ## Substitution
 

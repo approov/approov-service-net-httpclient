@@ -106,18 +106,20 @@ public class ApproovServiceInitializationEdgeCaseTests : IDisposable
 
         ApproovService.Initialize("dummy-config");
 
+        // A platform SDK "already initialized" result is still a successful initialization,
+        // so the reset applies exactly as it does for a fresh one.
         Assert.Equal(2, ApproovService.InitCallCount);
         Assert.True(ApproovService.IsApproovEnabled());
-        Assert.Same(custom, ApproovService.GetServiceMutator());
+        Assert.NotSame(custom, ApproovService.GetServiceMutator());
         var (header, prefix) = ApproovService.GetApproovTokenHeader();
-        Assert.Equal("X-Custom", header);
-        Assert.Equal("Bearer ", prefix);
-        Assert.Equal("X-Trace", ApproovService.GetApproovTraceIDHeader());
-        Assert.Equal("Authorization", ApproovService.GetBindingHeader());
-        Assert.True(ApproovService.GetUseApproovStatusIfNoToken());
-        Assert.True(ApproovService.GetSubstitutionHeaders().ContainsKey("X-Secret"));
-        Assert.Contains("api_key", ApproovService.GetSubstitutionQueryParams());
-        Assert.True(ApproovService.GetExclusionURLRegexs().ContainsKey("health"));
+        Assert.Equal("Approov-Token", header);
+        Assert.Equal("", prefix);
+        Assert.Equal("Approov-TraceID", ApproovService.GetApproovTraceIDHeader());
+        Assert.Null(ApproovService.GetBindingHeader());
+        Assert.False(ApproovService.GetUseApproovStatusIfNoToken());
+        Assert.Empty(ApproovService.GetSubstitutionHeaders());
+        Assert.Empty(ApproovService.GetSubstitutionQueryParams());
+        Assert.Empty(ApproovService.GetExclusionURLRegexs());
     }
 
     [Fact]
@@ -176,18 +178,46 @@ public class ApproovServiceInitializationEdgeCaseTests : IDisposable
     }
 
     [Fact]
-    public void Initialize_SameConfigReinit_PreservesCustomMutator()
+    public void Initialize_SameConfigReinit_ResetsCustomServiceMutator()
     {
+        // Every initialization is a boundary, including a same-config one. A custom mutator
+        // participates in rejection handling and substitution decisions, so it must not
+        // outlive the initialization it was scoped to. Matches React Native.
         ApproovService.Initialize("dummy-config");
         ApproovService.SetServiceMutator(new TestMutator());
 
         ApproovService.Initialize("dummy-config");
 
-        Assert.IsType<TestMutator>(ApproovService.GetServiceMutator());
+        Assert.IsNotType<TestMutator>(ApproovService.GetServiceMutator());
+        Assert.Contains(ApproovService.LogLines,
+            line => line.Contains("discarding a custom service mutator"));
     }
 
     [Fact]
-    public void Initialize_BypassUpgrade_PreservesCustomMutator()
+    public void Initialize_SameConfigReinit_ResetsRuntimeConfiguration()
+    {
+        ApproovService.Initialize("dummy-config");
+        ApproovService.SetApproovTokenHeader("X-Custom", "Bearer ");
+        ApproovService.SetApproovTraceIDHeader("X-Trace");
+        ApproovService.SetBindingHeader("Authorization");
+        ApproovService.SetUseApproovStatusIfNoToken(true);
+        ApproovService.AddSubstitutionHeader("X-Secret", null);
+        ApproovService.AddSubstitutionQueryParam("api_key");
+        ApproovService.AddExclusionURLRegex("health", ".*health.*");
+
+        ApproovService.Initialize("dummy-config");
+
+        Assert.Equal(("Approov-Token", ""), ApproovService.GetApproovTokenHeader());
+        Assert.Equal("Approov-TraceID", ApproovService.GetApproovTraceIDHeader());
+        Assert.Null(ApproovService.GetBindingHeader());
+        Assert.False(ApproovService.GetUseApproovStatusIfNoToken());
+        Assert.Empty(ApproovService.GetSubstitutionHeaders());
+        Assert.Empty(ApproovService.GetSubstitutionQueryParams());
+        Assert.Empty(ApproovService.GetExclusionURLRegexs());
+    }
+
+    [Fact]
+    public void Initialize_BypassUpgrade_ResetsCustomMutatorAndRuntimeConfiguration()
     {
         ApproovService.Initialize("");
         var custom = new TestMutator();
@@ -203,7 +233,7 @@ public class ApproovServiceInitializationEdgeCaseTests : IDisposable
         ApproovService.Initialize("real-config");
 
         Assert.True(ApproovService.IsApproovEnabled());
-        Assert.Same(custom, ApproovService.GetServiceMutator());
+        Assert.NotSame(custom, ApproovService.GetServiceMutator());
         Assert.Equal(("Approov-Token", ""), ApproovService.GetApproovTokenHeader());
         Assert.Equal("Approov-TraceID", ApproovService.GetApproovTraceIDHeader());
         Assert.Null(ApproovService.GetBindingHeader());

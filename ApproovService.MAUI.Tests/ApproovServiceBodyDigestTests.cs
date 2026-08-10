@@ -218,8 +218,11 @@ public class ApproovServiceBodyDigestTests : IDisposable
     }
 
     [Fact]
-    public async Task BodyDigest_SameConfigReinitialize_PreservesRequiredMode()
+    public async Task BodyDigest_SameConfigReinitialize_RestoresOptionalDefault()
     {
+        // A same-config re-initialization is an initialization boundary, so required-digest
+        // mode is reset along with the rest of the runtime configuration. Matches React
+        // Native, which resets on every initialize regardless of configuration equality.
         ApproovService.Initialize("dummy-config");
         ApproovService.SetBodyDigestEnabled(true, required: true);
         ApproovService.Initialize("dummy-config");
@@ -227,9 +230,9 @@ public class ApproovServiceBodyDigestTests : IDisposable
         var req = PostWith(new StreamContent(
             new NonSeekableStream(new byte[] { 1, 2, 3 })));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => SendAsync(req, inner));
+        await SendAsync(req, inner);
 
-        Assert.False(inner.Reached);
+        Assert.True(inner.Reached);
     }
 
     [Fact]

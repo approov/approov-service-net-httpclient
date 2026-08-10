@@ -16,7 +16,7 @@ The 20 July fixes resolved the actionable implementation findings:
 3. The common single-argument exclusion-regex API is available while retaining the named compatibility overload.
 4. Documentation now explains persistent binding, manual binding isolation, token non-caching, null-mutator behavior, and the signing failure contract.
 
-Full canonical conformance depends on resolving three specification conflicts. Same-config initialization preserves state and empty token/trace artifacts are omitted to match React Native, while the root requirements demand the opposite. The root missing-binding requirement is also incompatible with the production SDK contract: official Approov documentation states that once `pay` is enabled in a running app it can be changed but not removed. Native SDK logging-level forwarding remains unproven.
+Full canonical conformance depends on resolving two specification conflicts. Same-config initialization now resets runtime configuration and the custom mutator, matching React Native and the root requirements; empty token/trace artifacts are omitted to match React Native, while the root requirements demand the opposite. The root missing-binding requirement is also incompatible with the production SDK contract: official Approov documentation states that once `pay` is enabled in a running app it can be changed but not removed. Native SDK logging-level forwarding remains unproven.
 
 ## Scope and method
 
@@ -90,7 +90,7 @@ Raw counts alone are misleading because the same Android mini-SDK installation-k
 | Unavailable installation key proceeds unsigned | PASS | PASS | PASS |
 | Valid, invalid, accept-any, unprotected, and excluded-host TLS pins | PASS | PASS | PASS |
 | Forced pin refresh produces immediate retryable failure | PASS | PASS | PASS |
-| Same-config successful reinitialization resets runtime state | FAIL | FAIL | **CONFIRMED FAILURE:** current implementation intentionally preserves settings and mutator |
+| Same-config successful reinitialization resets runtime state | PASS | PASS | Resets runtime configuration and the custom mutator after every successful initialization, matching React Native |
 
 ## v3 and v5 endpoint evidence
 
@@ -110,11 +110,25 @@ The iOS mini-SDK run additionally proves the MAUI service-layer signing pipeline
 
 ## Confirmed implementation/specification gaps
 
-### 1. Same-configuration reinitialization
+### 1. Same-configuration reinitialization — RESOLVED
 
-The common requirements say that every successful initialization resets mutable runtime configuration and restores the default mutator. `ApproovService.Initialize` only calls `ResetRuntimeConfiguration` on the first successful initialization or when upgrading from bypass; the same-config path deliberately preserves current settings. The repository documentation and tests encode that preservation behavior, so this is a cross-repository contract decision rather than an accidental undocumented branch.
+`ApproovService.Initialize` now calls `ResetRuntimeConfiguration` after every successful
+initialization, including a same-config one and one where the platform SDK reports it was
+already initialized. The reset also replaces any custom service mutator with a fresh default,
+and logs a warning when it discards a custom mutator or a configured binding header.
 
-Required resolution: either reset all settings and the mutator after every successful same-config initialization, or update the common requirements and common test to state that same-config initialization is idempotent and preserves runtime state.
+This section previously described the preservation behaviour as a cross-repository contract
+decision matching React Native. That justification was incorrect. React Native resets both
+runtime configuration and the custom mutator on every initialize, on Android
+(`ApproovService.java`) and iOS (`ApproovService.m`), covers it with the named regression
+tests `initializeWithSameConfigResetsRuntimeConfiguration` and
+`initializeWithSameConfigResetsCustomServiceMutator`, and records the mutator reset in its
+changelog as security relevant. MAUI was doing the opposite of the reference it cited.
+
+The behaviour now matches the reference and the common requirements. This is a behavioural
+change for existing MAUI integrations: an application that configures headers, substitutions,
+exclusions or a custom mutator before a later `Initialize` call must reapply that
+configuration afterwards. See MIGRATION.md.
 
 ### 2. Persistent token binding — canonical requirement is not implementable
 

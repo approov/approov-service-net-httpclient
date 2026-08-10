@@ -1,5 +1,33 @@
 # Changelog
 
+## [Unreleased]
+
+### Security
+- **Test-only members no longer ship.** `ApproovService.ResetForTesting` and
+  `SignatureParametersFactory.NowSeconds` were compiled into the release assembly and the
+  NuGet package. `ResetForTesting` cleared the initialized flag, and both TLS entry points
+  return true while uninitialized, so one reflective call disabled Approov certificate
+  pinning and token injection process-wide. Both are now behind an `APPROOV_TESTING` constant
+  defined only by the test project.
+- **Synchronous `HttpClient.Send` no longer bypasses Approov.** Only `SendAsync` was
+  overridden, so the inherited `DelegatingHandler.Send` forwarded straight to the transport
+  with no token, no message signature and no secure string substitution. `Send` now throws
+  `NotSupportedException` naming the asynchronous API.
+- **Four TLS pinning bypasses closed.** A custom service mutator could switch pinning off on
+  Android; an empty host was accepted; an internationalized host missed the punycode-keyed
+  pin lookup and fell through to accept; and the constructors taking a caller-supplied
+  handler installed no pinning callback at all.
+- **Logging survives release builds.** The only sink was `Debug.WriteLine`, which is
+  `[Conditional("DEBUG")]`, so every Approov log was erased from the shipped package and
+  `SetLoggingLevel` had no effect. Logging now goes to logcat on Android and the device
+  console on iOS, which restores visibility of every fail-open path.
+
+### Changed
+- **Every successful initialization now resets runtime configuration and any custom service
+  mutator**, including a same-config re-initialization. Previously this state was preserved.
+  A discarded custom mutator or binding header is logged at warning level. This matches the
+  React Native service layer; see MIGRATION.md.
+
 ## [3.5.5] - 2026-07-08
 
 ### Added

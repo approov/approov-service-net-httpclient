@@ -97,12 +97,22 @@ public static partial class ApproovService
             _bodyDigestRequired);
     }
 
-    // Reset configuration that belongs to the request service layer. The active
-    // mutator is intentionally not reset: the React Native service permits an app to
-    // install a custom mutator before initialization and preserves it across a
-    // same-process initialization.
+    // Resets configuration that belongs to the request service layer, including any custom
+    // service mutator. Every successful initialization is a boundary: an app that installs a
+    // mutator must reinstall it afterwards. This matches the React Native service layer,
+    // which resets both on Android and iOS and records the mutator reset as security
+    // relevant, and it is the reason it matters here too: a custom mutator participates in
+    // rejection handling and substitution decisions, so it must not outlive the
+    // initialization it was scoped to.
     private static void ResetRuntimeConfiguration()
     {
+        if (_bindingHeader != null)
+            Log(ApproovLogLevel.Warning,
+                "initialization is discarding the binding header");
+        if (!_isInitialServiceMutator)
+            Log(ApproovLogLevel.Warning,
+                "initialization is discarding a custom service mutator");
+
         _approovTokenHeader = "Approov-Token";
         _approovTokenPrefix = "";
         _approovTraceIDHeader = "Approov-TraceID";
@@ -113,9 +123,8 @@ public static partial class ApproovService
         _substitutionHeaders = new();
         _substitutionQueryParams = new();
         _exclusionURLRegexs = new();
-        if (_isInitialServiceMutator
-            && _serviceMutator is ApproovDefaultMessageSigning signer)
-            signer.SetDefaultFactory(CreateDefaultSigningFactory());
+        _serviceMutator = CreateInitialServiceMutator();
+        _isInitialServiceMutator = true;
     }
 
     public static void Initialize(string config, string? comment = null)
@@ -138,9 +147,6 @@ public static partial class ApproovService
                 return;
             }
 
-            bool configUnchanged = _sdkInitialized
-                && string.Equals(_configUsed, config, StringComparison.Ordinal);
-
             // Non-empty configs are always forwarded to the platform SDK; a throw
             // propagates before any service-layer state is modified
             bool newlyInitialized = PlatformInitializeSdk(config, comment);
@@ -149,10 +155,11 @@ public static partial class ApproovService
                     "Platform SDK reports already initialized: treated as success");
             PlatformSetUserProperty("approov-service-maui/3.5.5");
 
-            // A duplicate initialization is common during development remounts. Keep
-            // all runtime request configuration in that case, matching React Native.
-            if (!configUnchanged)
-                lock (_stateLock) { ResetRuntimeConfiguration(); }
+            // Same-config re-initialization is an initialization boundary too, so runtime
+            // configuration and any custom mutator are reset here as well, and only after
+            // native success. Matches the React Native service layer, which resets on every
+            // initialize regardless of whether the configuration changed.
+            lock (_stateLock) { ResetRuntimeConfiguration(); }
             _configUsed = config;
             _isBypassMode = false;
             _sdkInitialized = true;
