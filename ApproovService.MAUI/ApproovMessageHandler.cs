@@ -272,6 +272,20 @@ public class ApproovMessageHandler : DelegatingHandler
 #endif
     }
 
+    // The parameterless constructor installs Approov pinning via CreatePlatformHandler, but
+    // the constructors that accept a caller-supplied handler previously installed none, so
+    // requests carried a valid token and signature over an unpinned connection with no error
+    // and no log. Install it when the slot is free. If the caller already set a callback we
+    // leave theirs alone, because USAGE.md documents wiring VerifyServerTrust by hand and
+    // overwriting that would break integrations that are already correct.
+    private static void EnsurePinning(HttpClientHandler handler)
+    {
+        if (handler.ServerCertificateCustomValidationCallback != null) return;
+        handler.ServerCertificateCustomValidationCallback =
+            (message, cert, chain, errors) =>
+                ApproovService.VerifyServerTrust(message, cert, chain, errors);
+    }
+
     private static HttpMessageHandler DisableInnerAutomaticRedirects(
         HttpMessageHandler inner)
     {
@@ -286,6 +300,7 @@ public class ApproovMessageHandler : DelegatingHandler
         {
             case HttpClientHandler httpClientHandler:
                 httpClientHandler.AllowAutoRedirect = false;
+                EnsurePinning(httpClientHandler);
                 return inner;
             case SocketsHttpHandler socketsHttpHandler:
                 socketsHttpHandler.AllowAutoRedirect = false;

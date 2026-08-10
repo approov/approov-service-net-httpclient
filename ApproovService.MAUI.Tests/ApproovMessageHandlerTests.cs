@@ -37,6 +37,39 @@ public class ApproovMessageHandlerTests : IDisposable
     }
 
     [Fact]
+    public void Constructor_CustomHttpClientHandler_InstallsPinningCallback()
+    {
+        // Previously only the parameterless constructor wired pinning, so a caller-supplied
+        // handler produced tokenized, signed requests over an unpinned connection.
+        var inner = new HttpClientHandler();
+        Assert.Null(inner.ServerCertificateCustomValidationCallback);
+
+        _ = new ApproovMessageHandler(inner);
+
+        Assert.NotNull(inner.ServerCertificateCustomValidationCallback);
+        Assert.False(inner.AllowAutoRedirect);
+    }
+
+    [Fact]
+    public void Constructor_CustomHttpClientHandler_KeepsCallerSuppliedCallback()
+    {
+        // USAGE.md documents wiring VerifyServerTrust by hand, so an existing callback is
+        // left alone rather than overwritten.
+        Func<HttpRequestMessage, System.Security.Cryptography.X509Certificates.X509Certificate2?,
+            System.Security.Cryptography.X509Certificates.X509Chain?,
+            System.Net.Security.SslPolicyErrors, bool> callerCallback =
+            (request, cert, chain, errors) => true;
+        var inner = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = callerCallback
+        };
+
+        _ = new ApproovMessageHandler(inner);
+
+        Assert.Same(callerCallback, inner.ServerCertificateCustomValidationCallback);
+    }
+
+    [Fact]
     public void Send_Synchronous_ThrowsRatherThanBypassingApproov()
     {
         // The transport deliberately supports synchronous Send. Without the override on

@@ -85,7 +85,9 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
         if (changes?.TokenHeaderKey == null)
             return request; // no Approov token was added, so nothing to sign
 
-        var factory = SelectFactory(request.RequestUri?.Host ?? "");
+        // IdnHost, not Host: an internationalized host registered via PutHostFactory is
+        // keyed in punycode, which is also what the pinning and same-origin paths use.
+        var factory = SelectFactory(request.RequestUri?.IdnHost ?? "");
         if (factory == null)
             return request;
 

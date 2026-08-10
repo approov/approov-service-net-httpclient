@@ -759,11 +759,19 @@ public static partial class ApproovService
         IReadOnlyList<X509Certificate2> chainCertificates)
     {
         if (!_sdkInitialized || _isBypassMode) return true;
-        IApproovServiceMutator mutator;
-        lock (_stateLock) { mutator = _serviceMutator; }
-        if (!mutator.HandlePinningShouldProcessRequest(request)) return true;
 
-        return VerifyPinsForHost(request.RequestUri?.Host ?? "", chainCertificates);
+        // The service mutator is deliberately NOT consulted here. This method's return value
+        // is the TLS trust decision itself, so honouring a "skip pinning" answer would mean
+        // accepting the certificate outright, not falling back to some other check. That
+        // made application code able to switch off the one control ordinary certificate
+        // validation cannot provide. The native iOS trust callback never consulted it (it
+        // carries no HttpRequestMessage) and the React Native layer declares the hook but
+        // never calls it on either platform, so removing it also aligns all four ports.
+
+        // IdnHost, not Host: for an internationalized domain Host yields the Unicode form
+        // while Approov pin sets, the token fetch URL and the same-origin check all use
+        // punycode. Using Host made the pin lookup miss and fall through to "not pinned".
+        return VerifyPinsForHost(request.RequestUri?.IdnHost ?? "", chainCertificates);
     }
 
     // Native iOS trust callbacks do not provide the original HttpRequestMessage. Apply
@@ -780,7 +788,10 @@ public static partial class ApproovService
         // disable Approov pinning for every host.
         if (string.IsNullOrEmpty(pinsJson)) return false;
 
-        if (string.IsNullOrEmpty(host)) return true;
+        // No resolvable host means no pin lookup is possible, so there is nothing to
+        // enforce against. Fail closed: the native iOS path rejects this condition before
+        // reaching here, and so does the reference implementation.
+        if (string.IsNullOrEmpty(host)) return false;
 
         using var pinsDoc = System.Text.Json.JsonDocument.Parse(pinsJson);
         var root = pinsDoc.RootElement;

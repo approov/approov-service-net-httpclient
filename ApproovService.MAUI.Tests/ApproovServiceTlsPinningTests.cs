@@ -145,16 +145,47 @@ public class ApproovServiceTlsPinningTests : IDisposable
     }
 
     [Fact]
-    public void VerifyPinning_MutatorSkipsRequest_ReturnsTrueWithoutFetchingPins()
+    public void VerifyPinning_MutatorCannotDisablePinning()
     {
+        // The return value of VerifyPinning is the TLS trust decision itself, so a mutator
+        // answering "do not apply pinning" must not turn it into an unconditional accept.
+        // Previously this returned true and never consulted the pin set.
         ApproovService.Initialize("dummy-config");
         ApproovService.SetServiceMutator(new SkipPinningMutator());
-        ApproovService.PinsJson = "{\"example.com\":[\"configured-pin\"]}";
+        ApproovService.PublicKeyBytes = new byte[] { 1, 2, 3, 4 };
+        ApproovService.PinsJson = "{\"example.com\":[\"not-the-pin\"]}";
         var cert = CreateSelfSignedCert();
         var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
 
-        Assert.True(ApproovService.VerifyPinning(req, new[] { cert }));
-        Assert.Null(ApproovService.LastPinType);
+        Assert.False(ApproovService.VerifyPinning(req, new[] { cert }));
+        Assert.Equal("public-key-sha256", ApproovService.LastPinType);
+    }
+
+    [Fact]
+    public void VerifyPinsForHost_EmptyHost_FailsClosed()
+    {
+        // No resolvable host means no pin lookup is possible. Accepting was a bypass.
+        ApproovService.Initialize("dummy-config");
+        ApproovService.PinsJson = "{\"example.com\":[\"configured-pin\"]}";
+        using var cert = CreateSelfSignedCert();
+
+        Assert.False(ApproovService.VerifyPinsForHost("", new[] { cert }));
+    }
+
+    [Fact]
+    public void VerifyPinning_InternationalizedHost_UsesPunycodePinLookup()
+    {
+        // Uri.Host yields "bücher.example" while pin sets, the token fetch URL and the
+        // same-origin check all use punycode, so the lookup missed and fell through to
+        // "host not pinned, accept". IdnHost keeps all four in agreement.
+        ApproovService.Initialize("dummy-config");
+        ApproovService.PublicKeyBytes = new byte[] { 1, 2, 3, 4 };
+        ApproovService.PinsJson = "{\"xn--bcher-kva.example\":[\"not-the-pin\"]}";
+        using var cert = CreateSelfSignedCert();
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://bücher.example/api");
+
+        Assert.False(ApproovService.VerifyPinning(req, new[] { cert }));
+        Assert.Equal("public-key-sha256", ApproovService.LastPinType);
     }
 
     [Fact]
