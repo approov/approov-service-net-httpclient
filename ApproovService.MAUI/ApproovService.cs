@@ -748,6 +748,27 @@ public static partial class ApproovService
         // name/expiry failure it reported must reject the connection before pinning.
         if (sslPolicyErrors != SslPolicyErrors.None) return false;
         if (serverCert == null || chain == null) return false;
+        return VerifyPinning(request, CollectChainCertificates(serverCert, chain));
+    }
+
+    /// <summary>
+    /// Trust callback for <see cref="System.Net.Http.SocketsHttpHandler"/>, whose
+    /// SslOptions.RemoteCertificateValidationCallback receives the <see cref="SslStream"/>
+    /// rather than the request. The SNI target host is all that is needed, because pinning
+    /// is keyed by host.
+    /// </summary>
+    internal static bool VerifyServerTrustForStream(object? sender,
+        X509Certificate? certificate, X509Chain? chain, SslPolicyErrors sslPolicyErrors)
+    {
+        if (sslPolicyErrors != SslPolicyErrors.None) return false;
+        if (certificate is not X509Certificate2 serverCert || chain == null) return false;
+        string host = (sender as SslStream)?.TargetHostName ?? "";
+        return VerifyPinsForHost(host, CollectChainCertificates(serverCert, chain));
+    }
+
+    private static List<X509Certificate2> CollectChainCertificates(
+        X509Certificate2 serverCert, X509Chain chain)
+    {
         var chainCertificates = new List<X509Certificate2>(
             Math.Max(1, chain.ChainElements.Count + chain.ChainPolicy.ExtraStore.Count));
         foreach (var element in chain.ChainElements)
@@ -759,7 +780,7 @@ public static partial class ApproovService
         AddCertificateIfMissing(chainCertificates, serverCert);
         foreach (var certificate in chain.ChainPolicy.ExtraStore)
             AddCertificateIfMissing(chainCertificates, certificate);
-        return VerifyPinning(request, chainCertificates);
+        return chainCertificates;
     }
 
     private static void AddCertificateIfMissing(

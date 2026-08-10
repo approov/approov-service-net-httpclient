@@ -51,6 +51,33 @@ public class ApproovMessageHandlerTests : IDisposable
     }
 
     [Fact]
+    public void Constructor_CustomSocketsHttpHandler_InstallsPinningCallback()
+    {
+        // SocketsHttpHandler validates through SslOptions rather than the request-aware
+        // callback, so it previously received no pinning at all.
+        var inner = new SocketsHttpHandler();
+        Assert.Null(inner.SslOptions.RemoteCertificateValidationCallback);
+
+        _ = new ApproovMessageHandler(inner);
+
+        Assert.NotNull(inner.SslOptions.RemoteCertificateValidationCallback);
+        Assert.False(inner.AllowAutoRedirect);
+    }
+
+    [Fact]
+    public void Constructor_CustomSocketsHttpHandler_KeepsCallerSuppliedCallback()
+    {
+        System.Net.Security.RemoteCertificateValidationCallback callerCallback =
+            (sender, cert, chain, errors) => true;
+        var inner = new SocketsHttpHandler();
+        inner.SslOptions.RemoteCertificateValidationCallback = callerCallback;
+
+        _ = new ApproovMessageHandler(inner);
+
+        Assert.Same(callerCallback, inner.SslOptions.RemoteCertificateValidationCallback);
+    }
+
+    [Fact]
     public void Constructor_CustomHttpClientHandler_KeepsCallerSuppliedCallback()
     {
         // USAGE.md documents wiring VerifyServerTrust by hand, so an existing callback is

@@ -286,6 +286,18 @@ public class ApproovMessageHandler : DelegatingHandler
                 ApproovService.VerifyServerTrust(message, cert, chain, errors);
     }
 
+    // SocketsHttpHandler validates through SslOptions.RemoteCertificateValidationCallback,
+    // which is handed the SslStream rather than the HttpRequestMessage. Its TargetHostName
+    // carries the SNI host, which is what pinning is keyed by, so pinning is installable here
+    // too. Verified against the framework rather than assumed.
+    private static void EnsurePinning(SocketsHttpHandler handler)
+    {
+        if (handler.SslOptions.RemoteCertificateValidationCallback != null) return;
+        handler.SslOptions.RemoteCertificateValidationCallback =
+            (sender, cert, chain, errors) =>
+                ApproovService.VerifyServerTrustForStream(sender, cert, chain, errors);
+    }
+
     private static HttpMessageHandler DisableInnerAutomaticRedirects(
         HttpMessageHandler inner)
     {
@@ -304,6 +316,7 @@ public class ApproovMessageHandler : DelegatingHandler
                 return inner;
             case SocketsHttpHandler socketsHttpHandler:
                 socketsHttpHandler.AllowAutoRedirect = false;
+                EnsurePinning(socketsHttpHandler);
                 return inner;
 #if ANDROID
             case Xamarin.Android.Net.AndroidMessageHandler androidMessageHandler:
