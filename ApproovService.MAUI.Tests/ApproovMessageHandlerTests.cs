@@ -37,6 +37,27 @@ public class ApproovMessageHandlerTests : IDisposable
     }
 
     [Fact]
+    public void Send_Synchronous_ThrowsRatherThanBypassingApproov()
+    {
+        // The transport deliberately supports synchronous Send. Without the override on
+        // ApproovMessageHandler, DelegatingHandler.Send forwards straight to it and the
+        // request reaches the network with no token and the placeholder secret intact.
+        ApproovService.Initialize("test-config");
+        ApproovService.AddSubstitutionHeader("X-Api-Key", null);
+        var inner = new SyncCapableHandler(HttpStatusCode.OK);
+        var handler = new ApproovMessageHandler(inner, automaticRedirectsAlreadyDisabled: true);
+        var client = new HttpClient(handler);
+        var request = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
+        request.Headers.TryAddWithoutValidation("X-Api-Key", "PLACEHOLDER-SECRET");
+
+        Assert.Throws<NotSupportedException>(() => client.Send(request));
+
+        Assert.False(inner.Reached);
+        Assert.Null(inner.LastRequest);
+        Assert.Equal(0, ApproovService.FetchCallCount);
+    }
+
+    [Fact]
     public async Task SendAsync_Initialized_TokenHeaderAdded()
     {
         ApproovService.Initialize("dummy-config");
@@ -342,6 +363,32 @@ public class ApproovMessageHandlerTests : IDisposable
             _capture?.Invoke(request);
             return Task.FromResult(new HttpResponseMessage(_status)
                 { RequestMessage = request });
+        }
+    }
+
+    // Unlike FakeHandler, this overrides the synchronous Send overload, so a request that
+    // slips past ApproovMessageHandler.Send would genuinely reach the transport instead of
+    // throwing from the HttpMessageHandler base implementation.
+    private sealed class SyncCapableHandler : HttpMessageHandler
+    {
+        private readonly HttpStatusCode _status;
+        internal bool Reached { get; private set; }
+        internal HttpRequestMessage? LastRequest { get; private set; }
+        internal SyncCapableHandler(HttpStatusCode status) => _status = status;
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken ct)
+            => Task.FromResult(Record(request));
+
+        protected override HttpResponseMessage Send(
+            HttpRequestMessage request, CancellationToken ct)
+            => Record(request);
+
+        private HttpResponseMessage Record(HttpRequestMessage request)
+        {
+            Reached = true;
+            LastRequest = request;
+            return new HttpResponseMessage(_status) { RequestMessage = request };
         }
     }
 

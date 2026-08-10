@@ -24,6 +24,19 @@ public class ApproovMessageHandler : DelegatingHandler
                 "The inner handler must have automatic redirects disabled", nameof(inner)))
     { }
 
+    // DelegatingHandler.Send forwards straight to the inner handler. Inheriting it would let
+    // any synchronous caller (HttpClient.Send, added in .NET 5) reach the network with no
+    // Approov token, no message signature and no secure-string substitution, so placeholder
+    // values would be transmitted verbatim while the connection is still pinned: a silent
+    // bypass. Supporting it properly would require a second copy of the redirect loop and
+    // would block the caller's thread on attestation, so this fails loudly instead.
+    protected override HttpResponseMessage Send(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+        => throw new NotSupportedException(
+            "ApproovMessageHandler does not support synchronous HttpClient.Send. Use the "
+            + "asynchronous API (SendAsync, GetAsync, PostAsync) so the request receives its "
+            + "Approov token, secure string substitutions and message signature.");
+
     protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
