@@ -60,7 +60,7 @@ You can initialize `ApproovService` with an empty configuration string to use th
 ApproovService.Initialize("");
 ```
 
-When initialized this way, `ApproovHttpClient` behaves like a standard `HttpClient`. It does not perform token injection, message signing, secure string substitution, or TLS pinning. You can upgrade to full Approov protection later by calling `Initialize` again with a valid configuration string. A configuration change restores the request settings to their defaults but preserves the active service mutator; repeating the same non-empty configuration preserves all runtime settings.
+When initialized this way, `ApproovHttpClient` behaves like a standard `HttpClient`. It does not perform token injection, message signing, secure string substitution, or TLS pinning. You can upgrade to full Approov protection later by calling `Initialize` again with a valid configuration string. **Every** successful initialization is a boundary: it resets runtime configuration (token/trace headers, binding, substitutions, exclusions, status-if-no-token) to their defaults and discards any custom service mutator, restoring the default signing mutator. This applies to **every** successful initialization — including a re-initialization with the **same** configuration — matching the reference React Native layer. Re-apply `SetServiceMutator` and any runtime configuration after each initialization.
 
 Use `ApproovService.IsApproovEnabled()` to check at runtime whether Approov is actively protecting requests:
 

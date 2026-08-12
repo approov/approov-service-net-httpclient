@@ -16,7 +16,7 @@ The 20 July fixes resolved the actionable implementation findings:
 3. The common single-argument exclusion-regex API is available while retaining the named compatibility overload.
 4. Documentation now explains persistent binding, manual binding isolation, token non-caching, null-mutator behavior, and the signing failure contract.
 
-Full canonical conformance depends on resolving two specification conflicts. Same-config initialization now resets runtime configuration and the custom mutator, matching React Native and the root requirements; empty token/trace artifacts are omitted to match React Native, while the root requirements demand the opposite. The root missing-binding requirement is also incompatible with the production SDK contract: official Approov documentation states that once `pay` is enabled in a running app it can be changed but not removed. Native SDK logging-level forwarding remains unproven.
+Most specification items are now resolved. Same-config initialization resets runtime configuration and the custom mutator — matching React Native, the root requirements, the code, and the tests — and the documentation was corrected to match. Empty token/trace artifacts are omitted to match React Native, and the root requirement was updated to require omission (evidence of processing is carried by the token-fallback status string). `SetLoggingLevel` is service-layer-scoped by design: the native Approov SDK exposes no log-level API on either platform, matching React Native. The one remaining canonical item is the missing-binding requirement, which is incompatible with the production SDK contract — official Approov documentation states that once `pay` is enabled in a running app it can be changed but not removed — so the root requirement should be updated to reflect persistent binding (tracked separately). Real v5 installation-key enforcement on a connected physical iOS device also remains outstanding.
 
 ## Scope and method
 
@@ -172,7 +172,7 @@ The following issues in `core-service-layers-testing` affected interpretation of
 2. The root requirement expects an empty binding value to produce SHA-256 of the empty string, but the tested mini-SDK path omits `pay` for blank data.
 3. ~~The root requirement requires empty token/trace headers, while the React Native coverage audit treats their omission as passing behavior.~~ **Resolved:** the root "Missing Artifacts Fallback" requirement was updated to require omission (RN-aligned).
 4. The mini-SDK README identifies `approov.io` as the default protected domain, while the compiled Android mini-attester configuration protects `replay.ivol.workers.dev`.
-5. The same-config reset rule conflicts with the React-Native-aligned preservation behavior currently documented and tested in this MAUI layer.
+5. ~~The same-config reset rule conflicts with the React-Native-aligned preservation behavior currently documented and tested in this MAUI layer.~~ **Resolved:** there is no behavioral conflict — the code, the tests (`Initialize_SameConfigReinit_ResetsCustomServiceMutator`, `...ResetsRuntimeConfiguration`), React Native, and the root requirement all **reset** on a same-config re-initialization. Only the `USAGE.md`/`REFERENCE.md` prose lagged (it still said "preserve") and has been corrected.
 
 These should be corrected or versioned in the canonical repository before the same harness is used as a release gate across every language implementation.
 
@@ -184,9 +184,7 @@ The functional documentation is substantial. The following content-requirement g
 - `USAGE.md` gained an `Initialization` section with a complete guarded example — state confirmation (`IsApproovEnabled`), device ID (`GetDeviceID`), an app-generated session/correlation id, and bypass fallback (`Initialize("")`) (**done**);
 - `REFERENCE.md` now has an obsolete/deprecated-API section documenting `Prefetch`, `SetProceedOnNetworkFail`, and `SetApproovInterceptorExtensions` as intentionally not implemented, with replacements (**done**).
 
-Remaining:
-
-- same-config reinitialization documentation in `USAGE.md` still describes the React-Native-aligned preservation behavior, which conflicts with the code (which now resets) and the root common requirements. This is tracked with the same-config canonical decision and is not resolved by this documentation pass.
+- same-config reinitialization documentation in `USAGE.md` and `REFERENCE.md` was corrected: both now describe the reset-on-every-initialization behavior (including a same-config re-init) that the code and tests already implement, matching React Native and the root requirements (**done**).
 
 ## Remaining verification limits
 

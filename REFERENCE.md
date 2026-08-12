@@ -4,7 +4,7 @@
 
 | Method | Description |
 |--------|-------------|
-| `ApproovService.Initialize(config, comment?)` | Initialize SDK. Empty `config` enters bypass mode only before a valid initialization. Repeating the same non-empty config preserves runtime settings; changing config restores request settings but preserves the active mutator. |
+| `ApproovService.Initialize(config, comment?)` | Initialize SDK. Empty `config` enters bypass mode only before a valid initialization. **Every** successful non-empty initialization is a boundary that resets runtime configuration to defaults and discards a custom mutator (restoring the default signing mutator) — **including a same-config re-initialization** — matching the React Native layer and the root requirements. Reinstall a custom mutator afterwards. A comment matching the first successful comment (commonly `null`) or starting with `reinit...` is treated as the same-config re-init path. |
 | `ApproovService.IsInitialized()` | Returns `true` after successful `Initialize`. |
 | `ApproovService.IsApproovEnabled()` | Returns `true` only when the native SDK is active and Approov protection is enabled. Returns `false` in bypass mode (`Initialize("")`) or before initialization. |
 

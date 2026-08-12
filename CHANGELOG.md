@@ -10,6 +10,12 @@
   bypass (`Initialize("")`) on failure. `REFERENCE.md` documents `Prefetch()`,
   `SetProceedOnNetworkFail(proceed)`, and `SetApproovInterceptorExtensions(callbacks)` as
   obsolete and intentionally not implemented, with their replacements.
+- **Corrected the same-config re-initialization documentation (no behavioral change).** `USAGE.md`
+  and the `REFERENCE.md` `Initialize` row previously said a same-config re-initialization *preserves*
+  runtime settings and the custom mutator. The code and tests already **reset** on every successful
+  initialization (including a same-config one), matching React Native and the root requirements; the
+  prose lagged and now matches. Re-apply `SetServiceMutator` and runtime configuration after each
+  initialization.
 - **Documented the empty token/trace contract (no behavioral change).** Empty token and trace
   headers are omitted (never sent empty-valued or prefix-only), matching the reference React Native
   layer; `SetUseApproovStatusIfNoToken` is the mechanism for surfacing the fetch status to the
