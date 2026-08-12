@@ -1,5 +1,10 @@
 # Approov SDK bindings for .NET HttpClient
 
+![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)
+![.NET MAUI](https://img.shields.io/badge/.NET%20MAUI-net9.0--ios%20%7C%20net9.0--android-512BD4?logo=dotnet&logoColor=white)
+![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20Android-3DDC84)
+![Message Signing](https://img.shields.io/badge/Message%20Signing-RFC%209421-1f6feb)
+
 A wrapper for the [Approov SDK](https://approov.io) to enable easy integration when using [`MAUI`](https://dotnet.microsoft.com/en-us/apps/maui) applications for making the API calls that you wish to protect with Approov using [`HttpClient`](https://learn.microsoft.com/en-us/dotnet/fundamentals/networking/http/httpclient). In order to use this you will need a trial or paid [Approov](https://www.approov.io) account.
 
 ## Quick start
@@ -51,7 +56,13 @@ See [REFERENCE.md](REFERENCE.md) for the full API surface.
 
 ## Usage
 
-See [USAGE.md](USAGE.md) for detailed feature documentation and customization examples.
+See [USAGE.md](USAGE.md) for detailed feature documentation and customization examples,
+including a guarded initialization example (state confirmation, device ID, app session
+correlation, and bypass fallback).
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the release history and behavioral changes.
 
 ## Migration from approov-service-xamarin
 

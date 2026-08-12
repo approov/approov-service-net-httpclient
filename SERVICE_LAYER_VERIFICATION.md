@@ -153,10 +153,16 @@ Regression tests cover SDK exceptions, malformed Base64, malformed DER, stale-he
 ### 5. Common API alignment
 
 - `SetServiceMutator(null)` now restores a newly configured `ApproovDefaultMessageSigning` instance. Consumers can explicitly install `ApproovServiceMutatorDefault.Shared` to disable signing.
-- `SetLoggingLevel` controls service-side `Debug.WriteLine` filtering; native SDK log-level propagation was not demonstrated.
+- `SetLoggingLevel` controls this layer's own logging, filtered by level and emitted through a
+  release-safe platform sink (`android.util.Log` / `NSLog`). **Logging scope resolved:** the native
+  Approov SDK exposes no log-level API on either platform (confirmed against the Android and iOS SDK
+  headers), and no other service layer forwards a level to the SDK — React Native's `setLogLevel`
+  likewise gates only the wrapper's logging. `SetLoggingLevel` is therefore service-layer-scoped by
+  design; this is now documented in `USAGE.md`/`REFERENCE.md`. Level filtering is covered by
+  `ApproovServiceLoggingTests` (`Off` suppresses all; `Error` suppresses info but keeps errors).
 - `AddExclusionURLRegex(pattern)` now provides the common form; the named overload remains for compatibility.
 
-Null-mutator and exclusion-regex behavior now match the common interface. Logging-level scope still requires a contract decision.
+Null-mutator, exclusion-regex, and logging-level behavior now match the common interface.
 
 ## Canonical test-repository inconsistencies found
 
@@ -172,13 +178,15 @@ These should be corrected or versioned in the canonical repository before the sa
 
 ## Documentation audit
 
-The functional documentation is substantial, but it does not yet meet all content requirements from the canonical repository:
+The functional documentation is substantial. The following content-requirement gaps were **addressed**:
 
-- the required badge row and exact quickstart section skeleton are absent;
-- initialization guidance lacks a complete guarded example with state confirmation, device ID, app-correlation UUID, and bypass fallback;
-- an obsolete/deprecated API section is absent;
-- same-config reinitialization documentation reflects the React Native behavior, which conflicts with the root common requirements;
-- the README should link directly to README, usage, reference, changelog, and migration material as required.
+- the required badge row was added and the README now links directly to usage, reference, changelog, and migration material (**done**);
+- `USAGE.md` gained an `Initialization` section with a complete guarded example — state confirmation (`IsApproovEnabled`), device ID (`GetDeviceID`), an app-generated session/correlation id, and bypass fallback (`Initialize("")`) (**done**);
+- `REFERENCE.md` now has an obsolete/deprecated-API section documenting `Prefetch`, `SetProceedOnNetworkFail`, and `SetApproovInterceptorExtensions` as intentionally not implemented, with replacements (**done**).
+
+Remaining:
+
+- same-config reinitialization documentation in `USAGE.md` still describes the React-Native-aligned preservation behavior, which conflicts with the code (which now resets) and the root common requirements. This is tracked with the same-config canonical decision and is not resolved by this documentation pass.
 
 ## Remaining verification limits
 

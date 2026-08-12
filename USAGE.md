@@ -2,6 +2,55 @@
 
 This document describes the features and functionality of the Approov Service for .NET MAUI. It covers how to interact with the service layer and customize its behavior, specifically through `IApproovServiceMutator`. For a basic integration example, refer to the [Quickstart guide](https://github.com/approov/quickstart-maui).
 
+## Initialization
+
+Initialize `ApproovService` once at app startup (for example in `MauiProgram.cs`). Wrap it in a
+`try`/`catch`: on success, confirm the layer is actually enabled and record the Approov device ID
+together with an app-generated session/correlation id; on failure, log it and continue
+**unprotected** by re-initializing with an empty config (bypass mode) so the app still functions.
+
+```csharp
+using System;
+using System.Diagnostics;
+using Approov; // ApproovService
+
+public static class ApproovStartup
+{
+    // App-generated id for correlating this app session with Approov metrics/logs.
+    // Generate once per app run.
+    public static readonly string SessionId = Guid.NewGuid().ToString();
+
+    public static void Initialize()
+    {
+        try
+        {
+            ApproovService.Initialize("<your-config-string>");
+
+            // Confirm protection is genuinely active before relying on it.
+            if (ApproovService.IsApproovEnabled())
+            {
+                // The Approov device ID is stable per install and useful in support tickets.
+                Debug.WriteLine($"Approov enabled. deviceID={ApproovService.GetDeviceID()} session={SessionId}");
+            }
+            else
+            {
+                Debug.WriteLine($"Approov initialized in bypass mode. session={SessionId}");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Never let an initialization failure crash the app. Fall back to bypass mode so
+            // the app still functions (unprotected), and surface the failure.
+            Debug.WriteLine($"Approov initialization failed: {ex.Message}; continuing unprotected. session={SessionId}");
+            ApproovService.Initialize("");
+        }
+    }
+}
+```
+
+An empty config string starts **bypass mode** (see below). Comments passed to `Initialize` that
+start with `reinit...` or `options:...` are supported and forwarded to the SDK verbatim.
+
 ## Bypass Mode (Empty Config)
 
 You can initialize `ApproovService` with an empty configuration string to use the service layer without active Approov protection. This is useful for apps that remotely activate Approov, or when you need a standard `HttpClient` wrapper during development or maintenance:
@@ -229,4 +278,13 @@ Set to 0 to disable caching.
 ApproovService.SetLoggingLevel(ApproovLogLevel.Debug);
 ```
 
-Levels: `Off`, `Error`, `Warning`, `Info` (default), `Debug`.
+Levels: `Off`, `Error`, `Warning`, `Info` (default), `Debug`. A message is emitted only when its
+level is at or above the configured level; `Off` suppresses all output.
+
+`SetLoggingLevel` governs **this service layer's own logging** (initialization, request mutation,
+and every fail-open path), which is emitted through a platform sink (`android.util.Log` on Android,
+`NSLog`/`os_log` on iOS) that survives release builds. Its scope is the service layer only: the
+underlying native Approov SDK manages its own internal logging and exposes no log-level control to
+the layer, so `SetLoggingLevel` does not change SDK-internal verbosity. This matches the logging
+contract of the other Approov service layers (for example React Native), where the same call gates
+the wrapper's logging rather than the SDK's.

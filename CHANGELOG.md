@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Documentation
+- **Added a badge row, a guarded initialization example, and an obsolete-API section.** The README
+  now carries .NET/MAUI/platform/message-signing badges and links to `CHANGELOG.md`. `USAGE.md`
+  gained an `Initialization` section showing a `try`/`catch` startup that confirms
+  `IsApproovEnabled()`, records `GetDeviceID()` with an app-generated session id, and falls back to
+  bypass (`Initialize("")`) on failure. `REFERENCE.md` documents `Prefetch()`,
+  `SetProceedOnNetworkFail(proceed)`, and `SetApproovInterceptorExtensions(callbacks)` as
+  obsolete and intentionally not implemented, with their replacements.
+- **Clarified `SetLoggingLevel` scope (no behavioral change).** Documented that it controls only
+  this service layer's own logging — emitted through a release-safe platform sink — and that the
+  native Approov SDK exposes no log-level control to the layer, matching the logging contract of
+  the other Approov service layers (e.g. React Native).
+
 ### Security
 - **Test-only members no longer ship.** `ApproovService.ResetForTesting` and
   `SignatureParametersFactory.NowSeconds` were compiled into the release assembly and the

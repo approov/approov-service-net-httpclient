@@ -18,7 +18,7 @@
 | `SetBodyDigestEnabled(bool enabled)` | Configure SHA-256 `Content-Digest` generation in the automatically installed signer. Enabled and optional by default. Equivalent to `SetBodyDigestEnabled(enabled, false)`. Custom signing factories must use `SetBodyDigestConfig` directly. |
 | `SetBodyDigestEnabled(bool enabled, bool required)` | As above, with strict mode. If enabled and required, failure to generate a digest—including a missing, empty, unknown-length, or non-replayable body—fails the request. Every successful initialization restores the enabled/optional defaults, including a same-config one. |
 | `SetFailureCacheTTL(seconds)` | Failure cache TTL (default: 5.0 s). |
-| `SetLoggingLevel(level)` | `Off/Error/Warning/Info/Debug` (default: `Info`). |
+| `SetLoggingLevel(level)` | Set this service layer's logging verbosity: `Off/Error/Warning/Info/Debug` (default: `Info`). Governs the wrapper's own logs only (emitted through a release-safe platform sink); the native Approov SDK manages its internal logging and exposes no log-level control to the layer. |
 | `SetServiceMutator(mutator)` | Replace the callback handler (initially an `ApproovDefaultMessageSigning` instance). **Every successful `Initialize` call discards a custom mutator and restores the default, including a same-config re-initialization; reinstall it after initializing.** Pass `null` to restore a newly configured default signing mutator. Install `ApproovServiceMutatorDefault.Shared` explicitly to disable signing. Both provided mutator classes expose virtual callbacks for selective customization. |
 
 ## Substitution
@@ -84,3 +84,15 @@ Failure contract:
   no `Signature`/`Signature-Input` headers. No configured factory also leaves the request unsigned.
 - **Fail-closed** — an unsupported signing algorithm or failure to create a required
   `Content-Digest` propagates and aborts the request.
+
+## Obsolete / deprecated APIs
+
+The following methods appear in the common Approov service-layer interface but are **deprecated**
+and are **intentionally not implemented** in this .NET MAUI layer. They require no action; if you
+are migrating from another Approov service layer that exposed them, use the replacement noted.
+
+| Obsolete API | Status in this layer | Replacement / notes |
+|--------------|----------------------|---------------------|
+| `Prefetch()` | Not provided | Obsolete. Token fetching happens automatically on each protected request; there is nothing to prefetch. |
+| `SetProceedOnNetworkFail(proceed)` | Not provided | Deprecated no-op elsewhere. Network-failure handling is governed by the installed `IApproovServiceMutator` and the failure cache (`SetFailureCacheTTL`) instead. |
+| `SetApproovInterceptorExtensions(callbacks)` | Not provided | Deprecated. Replaced by the mutator model: install an `IApproovServiceMutator` via `SetServiceMutator` to customize per-status request handling. |
