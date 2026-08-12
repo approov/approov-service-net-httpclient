@@ -26,6 +26,49 @@ public interface IApproovTokenFetchResult
     string? TraceID { get; }
 }
 
+/// <summary>
+/// Immutable snapshot of a token-fetch result, taken once at the fetch boundary.
+///
+/// On .NET Android the SDK's <c>TokenFetchStatus</c> binds as a <c>Java.Lang.Enum</c>
+/// (not a C# value enum), so its managed peer is marshalled across JNI on every access.
+/// Reading the live result repeatedly — or comparing enum peers by reference — is
+/// timing-sensitive and is the cause of the intermittent "Unknown approov token fetch
+/// result SUCCESS" reported on .NET Android (the status appears unmatched on one read yet
+/// stringifies to "SUCCESS"). Reading every field exactly once, on the calling thread
+/// immediately after the synchronous native fetch and before any continuation, removes
+/// that surface. All consumers then read from these immutable fields.
+/// </summary>
+public sealed class SnapshotTokenFetchResult : IApproovTokenFetchResult
+{
+    public ApproovTokenFetchStatus Status { get; }
+    public string Token { get; }
+    public string? SecureString { get; }
+    public string ARC { get; }
+    public string RejectionReasons { get; }
+    public bool IsConfigChanged { get; }
+    public bool IsForceApplyPins { get; }
+    public string LoggableToken { get; }
+    public string? TraceID { get; }
+
+    public SnapshotTokenFetchResult(IApproovTokenFetchResult source)
+    {
+        // Read each member exactly once, in order, on this thread.
+        Status = source.Status;
+        Token = source.Token;
+        SecureString = source.SecureString;
+        ARC = source.ARC;
+        RejectionReasons = source.RejectionReasons;
+        IsConfigChanged = source.IsConfigChanged;
+        IsForceApplyPins = source.IsForceApplyPins;
+        LoggableToken = source.LoggableToken;
+        TraceID = source.TraceID;
+    }
+
+    /// <summary>Snapshot a fetch result, unless it is already an immutable snapshot.</summary>
+    public static IApproovTokenFetchResult Of(IApproovTokenFetchResult source) =>
+        source is SnapshotTokenFetchResult ? source : new SnapshotTokenFetchResult(source);
+}
+
 public struct ApproovUpdateResponse
 {
     public HttpRequestMessage? Request;

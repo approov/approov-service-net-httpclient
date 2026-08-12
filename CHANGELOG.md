@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Android: intermittent "Unknown approov token fetch result SUCCESS".** On .NET Android the SDK
+  `TokenFetchStatus` binds as a `Java.Lang.Enum`, so its managed peer is marshalled across JNI on
+  every access; reading the live fetch result repeatedly could observe the status inconsistently
+  (unmatched on one read, yet "SUCCESS" when stringified) — the failure reported from production.
+  The native fetch result is now snapshotted once at the fetch boundary (`SnapshotTokenFetchResult`),
+  on the calling thread immediately after the synchronous fetch, so every consumer reads one stable
+  value. Covered by `SnapshotTokenFetchResultTests`. Confirming the intermittent native repro still
+  requires an on-device run.
+
 ### Documentation
 - **Added a badge row, a guarded initialization example, and an obsolete-API section.** The README
   now carries .NET/MAUI/platform/message-signing badges and links to `CHANGELOG.md`. `USAGE.md`

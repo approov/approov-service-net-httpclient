@@ -413,7 +413,7 @@ public static partial class ApproovService
             throw new PermanentException("precheck: Approov is disabled");
         // A secure-string lookup performs an attestation without requiring a
         // protected API hostname. UNKNOWN_KEY is the expected successful outcome.
-        var result = PlatformFetchSecureStringAndWait("precheck-dummy-key", null);
+        var result = SnapshotTokenFetchResult.Of(PlatformFetchSecureStringAndWait("precheck-dummy-key", null));
         IApproovServiceMutator mutator;
         lock (_stateLock) { mutator = _serviceMutator; }
         mutator.HandlePrecheckResult(result);
@@ -427,7 +427,7 @@ public static partial class ApproovService
         // Serialize direct token fetches with interceptor binding updates so they cannot
         // observe or disturb the SDK data hash halfway through a bound request.
         lock (_bindingFetchLock)
-            result = PlatformFetchApproovTokenAndWait(url);
+            result = SnapshotTokenFetchResult.Of(PlatformFetchApproovTokenAndWait(url));
         IApproovServiceMutator mutator;
         lock (_stateLock) { mutator = _serviceMutator; }
         mutator.HandleFetchTokenResult(result);
@@ -438,7 +438,7 @@ public static partial class ApproovService
     {
         EnsureInitialized();
         if (_isBypassMode) return new BypassFetchResult(ApproovTokenFetchStatus.UnknownKey);
-        var result = PlatformFetchSecureStringAndWait(key, newDef);
+        var result = SnapshotTokenFetchResult.Of(PlatformFetchSecureStringAndWait(key, newDef));
         IApproovServiceMutator mutator;
         lock (_stateLock) { mutator = _serviceMutator; }
         mutator.HandleFetchSecureStringResult(result, newDef == null ? "fetch" : "set", key);
@@ -449,7 +449,7 @@ public static partial class ApproovService
     {
         EnsureInitialized();
         if (_isBypassMode) return new BypassFetchResult(ApproovTokenFetchStatus.Disabled);
-        var result = PlatformFetchCustomJWTAndWait(payload);
+        var result = SnapshotTokenFetchResult.Of(PlatformFetchCustomJWTAndWait(payload));
         IApproovServiceMutator mutator;
         lock (_stateLock) { mutator = _serviceMutator; }
         mutator.HandleFetchCustomJWTResult(result);
@@ -926,11 +926,11 @@ public static partial class ApproovService
             }
             // The leader's result was not cacheable; fetch our own without owning the
             // miss-group (a fresh leader will coalesce any subsequent callers).
-            return PlatformFetchApproovTokenAndWait(url);
+            return SnapshotTokenFetchResult.Of(PlatformFetchApproovTokenAndWait(url));
         }
         try
         {
-            var result = PlatformFetchApproovTokenAndWait(url);
+            var result = SnapshotTokenFetchResult.Of(PlatformFetchApproovTokenAndWait(url));
             lock (_failureCacheLock)
             {
                 if (result.Status is ApproovTokenFetchStatus.NoNetwork
@@ -972,7 +972,7 @@ public static partial class ApproovService
                 && DateTime.UtcNow < _failureCacheExpiry)
                 return _failureCacheResult;
         }
-        var result = PlatformFetchSecureStringAndWait(key, newDef);
+        var result = SnapshotTokenFetchResult.Of(PlatformFetchSecureStringAndWait(key, newDef));
         lock (_failureCacheLock)
         {
             if (result.Status is ApproovTokenFetchStatus.NoNetwork
