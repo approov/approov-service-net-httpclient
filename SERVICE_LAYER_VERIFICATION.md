@@ -16,7 +16,7 @@ The 20 July fixes resolved the actionable implementation findings:
 3. The common single-argument exclusion-regex API is available while retaining the named compatibility overload.
 4. Documentation now explains persistent binding, manual binding isolation, token non-caching, null-mutator behavior, and the signing failure contract.
 
-Most specification items are now resolved. Same-config initialization resets runtime configuration and the custom mutator — matching React Native, the root requirements, the code, and the tests — and the documentation was corrected to match. Empty token/trace artifacts are omitted to match React Native, and the root requirement was updated to require omission (evidence of processing is carried by the token-fallback status string). `SetLoggingLevel` is service-layer-scoped by design: the native Approov SDK exposes no log-level API on either platform, matching React Native. The one remaining canonical item is the missing-binding requirement, which is incompatible with the production SDK contract — official Approov documentation states that once `pay` is enabled in a running app it can be changed but not removed — so the root requirement should be updated to reflect persistent binding (tracked separately). Real v5 installation-key enforcement on a connected physical iOS device also remains outstanding.
+Most specification items are now resolved. Same-config initialization resets runtime configuration and the custom mutator — matching React Native, the root requirements, the code, and the tests — and the documentation was corrected to match. Empty token/trace artifacts are omitted to match React Native, and the root requirement was updated to require omission (evidence of processing is carried by the token-fallback status string). `SetLoggingLevel` is service-layer-scoped by design: the native Approov SDK exposes no log-level API on either platform, matching React Native. The missing-binding requirement is also resolved: the root requirement was updated to model **persistent** binding (the production SDK does not allow removing `pay` once set — it can only be changed), matching the layer and React Native. With that, all specification conflicts are closed; the remaining items are verification-only — real v5 installation-key enforcement on a connected physical iOS device, and NuGet publication.
 
 ## Scope and method
 
@@ -130,13 +130,13 @@ change for existing MAUI integrations: an application that configures headers, s
 exclusions or a custom mutator before a later `Initialize` call must reapply that
 configuration afterwards. See MIGRATION.md.
 
-### 2. Persistent token binding — canonical requirement is not implementable
+### 2. Persistent token binding — RESOLVED (root updated to model persistence)
 
 When the configured binding header is present, its serialized value is sent to the SDK before fetching the token. The canonical test expects a subsequent missing header to remove `pay`. However, the production SDK declares the value non-null and the official token-binding documentation states that once `pay` has been added it cannot be removed in the running app, only changed: <https://approov.io/docs/latest/approov-usage-documentation/#token-binding>.
 
 An experimental nullable call cleared the mini-SDK state on Android. On iOS, the generated binding correctly rejected null because the native selector is non-null. Overriding that metadata made the mini-SDK test pass but would violate the supported production SDK contract, so that unsafe change was not retained.
 
-Required resolution: update the canonical requirement and harness to model persistent binding, matching the production SDK and React Native behavior. Applications should bind to a header that remains present for the protected session. If removal during an app process is a product requirement, the native SDK must first provide and document a supported clear API.
+**Resolved:** the canonical requirement (root `TESTING_REQUIREMENTS.md` "Missing Binding Header" and "Token Binding Hash (Automatic)") was updated to model persistent binding, matching the production SDK and React Native. The MAUI layer is already correct — it never attempts to clear `pay`, and `USAGE.md`/`REFERENCE.md` already document the persistence and the no-mixing rule for manual/automatic binding. Applications should bind to a header that remains present for the protected session; if clearing a binding during an app process ever becomes a product requirement, the native SDK must first provide and document a supported clear API.
 
 ### 3. Empty token/trace artifacts — RESOLVED (omission is canonical)
 
@@ -168,7 +168,7 @@ Null-mutator, exclusion-regex, and logging-level behavior now match the common i
 
 The following issues in `core-service-layers-testing` affected interpretation of the results:
 
-1. The missing-binding rule requires removal of `pay`, but the production SDK documents binding as non-removable during the running app.
+1. ~~The missing-binding rule requires removal of `pay`, but the production SDK documents binding as non-removable during the running app.~~ **Resolved:** the root "Missing Binding Header" / "Token Binding Hash (Automatic)" requirements were updated to model persistent binding (RN-aligned).
 2. The root requirement expects an empty binding value to produce SHA-256 of the empty string, but the tested mini-SDK path omits `pay` for blank data.
 3. ~~The root requirement requires empty token/trace headers, while the React Native coverage audit treats their omission as passing behavior.~~ **Resolved:** the root "Missing Artifacts Fallback" requirement was updated to require omission (RN-aligned).
 4. The mini-SDK README identifies `approov.io` as the default protected domain, while the compiled Android mini-attester configuration protects `replay.ivol.workers.dev`.
@@ -199,4 +199,4 @@ The functional documentation is substantial. The following content-requirement g
 
 ## Release recommendation
 
-The signing-policy and common-API implementation findings are resolved, and Android production-SDK requests now pass both the v3 and v5 Shapes endpoints when the documented URLs are used. Before claiming full common-service-layer conformance, update the canonical repository to reflect supported persistent binding and make explicit decisions for same-config reset and missing artifacts. Also verify native logging semantics and complete v5 enforcement on a connected physical iOS device before release publication.
+The signing-policy and common-API implementation findings are resolved, and Android production-SDK requests now pass both the v3 and v5 Shapes endpoints when the documented URLs are used. The specification conflicts are now closed: the canonical repository models **persistent binding** and **omission** of empty token/trace artifacts, the **same-config reset** behavior is aligned across code, tests, and docs, and **logging** semantics are documented (the SDK exposes no log-level API, so `SetLoggingLevel` is service-layer-scoped). The remaining pre-publication items are verification-only: complete real v5 installation-key enforcement on a connected physical iOS device, and publish and verify the NuGet package.

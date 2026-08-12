@@ -10,6 +10,12 @@
   bypass (`Initialize("")`) on failure. `REFERENCE.md` documents `Prefetch()`,
   `SetProceedOnNetworkFail(proceed)`, and `SetApproovInterceptorExtensions(callbacks)` as
   obsolete and intentionally not implemented, with their replacements.
+- **Confirmed the persistent token-binding contract (no behavioral change).** Approov binding is
+  persistent native SDK state: once a `pay` claim is set in a running app it can be changed but not
+  removed, so a request missing the configured binding header leaves the current binding unchanged.
+  The layer already implements this and `USAGE.md`/`REFERENCE.md` already document it (including the
+  no-mixing rule for manual/automatic binding); the canonical root requirement was updated to model
+  persistent binding, resolving the prior "remove `pay`" expectation.
 - **Corrected the same-config re-initialization documentation (no behavioral change).** `USAGE.md`
   and the `REFERENCE.md` `Initialize` row previously said a same-config re-initialization *preserves*
   runtime settings and the custom mutator. The code and tests already **reset** on every successful
