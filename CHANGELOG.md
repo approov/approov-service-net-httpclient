@@ -9,8 +9,9 @@
   (unmatched on one read, yet "SUCCESS" when stringified) — the failure reported from production.
   The native fetch result is now snapshotted once at the fetch boundary (`SnapshotTokenFetchResult`),
   on the calling thread immediately after the synchronous fetch, so every consumer reads one stable
-  value. Covered by `SnapshotTokenFetchResultTests`. Confirming the intermittent native repro still
-  requires an on-device run.
+  value. This removes the repeated-read, reference-comparison and cross-thread-read paths behind the
+  failure. Covered by `SnapshotTokenFetchResultTests`. On-device validation that it *eliminates*
+  (rather than merely reduces) the intermittent case is still pending.
 
 ### Documentation
 - **Added a badge row, a guarded initialization example, and an obsolete-API section.** The README
