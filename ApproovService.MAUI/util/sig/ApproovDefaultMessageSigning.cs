@@ -33,6 +33,11 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
 
     private const string REQUIRED_BODY_DIGEST_ERROR = "Failed to create required body digest";
     private const string UNSUPPORTED_ALGORITHM_ERROR = "Unsupported algorithm identifier: ";
+    // Marker set on Exception.Data to flag a deliberate fail-CLOSED signing error
+    // (required body digest could not be produced, or an unsupported algorithm) so the
+    // handler can distinguish it from operational fail-OPEN failures without matching on
+    // exception message text, which is brittle across refactors.
+    private const string FAIL_CLOSED_MARKER = "ApproovSigningFailClosed";
 
     public ApproovDefaultMessageSigning SetDefaultFactory(SignatureParametersFactory factory)
     {
@@ -127,7 +132,8 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
                     break;
                 }
                 default:
-                    throw new InvalidOperationException(UNSUPPORTED_ALGORITHM_ERROR + alg);
+                    throw new InvalidOperationException(UNSUPPORTED_ALGORITHM_ERROR + alg)
+                        { Data = { [FAIL_CLOSED_MARKER] = true } };
             }
 
             string sigHeader = SFV.SerializeDictionary(sigId, signature);
@@ -140,11 +146,11 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
             request.Headers.TryAddWithoutValidation("Signature", sigHeader);
             return request;
         }
-        catch (InvalidOperationException exception) when (
-            exception.Message == REQUIRED_BODY_DIGEST_ERROR
-            || exception.Message.StartsWith(
-                UNSUPPORTED_ALGORITHM_ERROR, StringComparison.Ordinal))
+        catch (InvalidOperationException exception)
+            when (exception.Data.Contains(FAIL_CLOSED_MARKER))
         {
+            // Deliberate fail-closed: required body digest unavailable or unsupported
+            // algorithm. Propagate so the interceptor aborts the request.
             throw;
         }
         catch (Exception exception)
@@ -303,7 +309,8 @@ public class ApproovDefaultMessageSigning : IApproovServiceMutator
                 if (TryGenerateBodyDigest(request, _bodyDigestAlgorithm))
                     p.AddComponentIdentifier(new StringItem("content-digest"));
                 else if (_bodyDigestRequired)
-                    throw new InvalidOperationException(REQUIRED_BODY_DIGEST_ERROR);
+                    throw new InvalidOperationException(REQUIRED_BODY_DIGEST_ERROR)
+                        { Data = { [FAIL_CLOSED_MARKER] = true } };
             }
 
             return p;

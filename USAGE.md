@@ -179,7 +179,7 @@ Use `AddExclusionURLRegex(pattern)` to exclude URLs from substitution (e.g. heal
 
 HTTP message signing is provided by `ApproovDefaultMessageSigning`, which is installed automatically
 as the initial service mutator. It adds RFC 9421 `Signature` / `Signature-Input` headers to requests that already
-carries an Approov token (requests without a token are never signed). Two modes are supported:
+carry an Approov token (requests without a token are never signed). Two modes are supported:
 
 - **Install signing** — `alg="ecdsa-p256-sha256"`, signature id `install` (the default). Signed
   with the per-install device key. The SDK returns an ASN.1 DER signature, which is emitted as the
