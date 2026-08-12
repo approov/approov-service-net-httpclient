@@ -10,6 +10,12 @@
   bypass (`Initialize("")`) on failure. `REFERENCE.md` documents `Prefetch()`,
   `SetProceedOnNetworkFail(proceed)`, and `SetApproovInterceptorExtensions(callbacks)` as
   obsolete and intentionally not implemented, with their replacements.
+- **Documented the empty token/trace contract (no behavioral change).** Empty token and trace
+  headers are omitted (never sent empty-valued or prefix-only), matching the reference React Native
+  layer; `SetUseApproovStatusIfNoToken` is the mechanism for surfacing the fetch status to the
+  backend when no token is available. The canonical root requirement was updated to require omission,
+  resolving a prior repository inconsistency. Behavior is already covered by
+  `UpdateRequest_TraceIDNullOrEmpty_DoesNotAddTraceHeader`.
 - **Clarified `SetLoggingLevel` scope (no behavioral change).** Documented that it controls only
   this service layer's own logging — emitted through a release-safe platform sink — and that the
   native Approov SDK exposes no log-level control to the layer, matching the logging contract of

@@ -138,11 +138,11 @@ An experimental nullable call cleared the mini-SDK state on Android. On iOS, the
 
 Required resolution: update the canonical requirement and harness to model persistent binding, matching the production SDK and React Native behavior. Applications should bind to a header that remains present for the protected session. If removal during an app process is a product requirement, the native SDK must first provide and document a supported clear API.
 
-### 3. Empty token/trace artifacts
+### 3. Empty token/trace artifacts — RESOLVED (omission is canonical)
 
-The service currently adds the token and trace headers only when their values are non-empty. The root common requirement says that empty artifacts must be emitted to demonstrate that Approov processing occurred. Both device runs observed the missing empty trace header; the equivalent token condition is visible in the request mutation code.
+The service adds the token and trace headers only when their values are non-empty. This is now the **canonical contract**: the root "Missing Artifacts Fallback" requirement was updated to require omission (not empty-valued/prefix-only headers), matching the reference React Native layer, whose coverage already treats omission as the expected behavior. An empty `Approov-Token` header is meaningless and can be misread by a backend as a token rather than its absence; the intended way to signal that Approov ran without a usable token is the **Token Fallback Status** mechanism (`SetUseApproovStatusIfNoToken`), which injects the fetch status string into the token header.
 
-Required resolution: choose one canonical contract. If empty headers are required, remove the non-empty guards while retaining null handling. If omission is intended, update the root requirement; the React Native coverage audit already describes omission as the expected behavior, so the canonical repository is internally inconsistent here.
+No code change was required — the layer already omits, and the behavior is covered by `UpdateRequest_TraceIDNullOrEmpty_DoesNotAddTraceHeader` and the token-fallback tests. The internal inconsistency in the canonical repository (root demanding emission vs the React Native audit expecting omission) is removed by the root update.
 
 ### 4. Signing failure policy — fixed 20 July 2026
 
@@ -170,7 +170,7 @@ The following issues in `core-service-layers-testing` affected interpretation of
 
 1. The missing-binding rule requires removal of `pay`, but the production SDK documents binding as non-removable during the running app.
 2. The root requirement expects an empty binding value to produce SHA-256 of the empty string, but the tested mini-SDK path omits `pay` for blank data.
-3. The root requirement requires empty token/trace headers, while the React Native coverage audit treats their omission as passing behavior.
+3. ~~The root requirement requires empty token/trace headers, while the React Native coverage audit treats their omission as passing behavior.~~ **Resolved:** the root "Missing Artifacts Fallback" requirement was updated to require omission (RN-aligned).
 4. The mini-SDK README identifies `approov.io` as the default protected domain, while the compiled Android mini-attester configuration protects `replay.ivol.workers.dev`.
 5. The same-config reset rule conflicts with the React-Native-aligned preservation behavior currently documented and tested in this MAUI layer.
 

@@ -136,6 +136,8 @@ ApproovService.SetUseApproovStatusIfNoToken(true);
 
 This setting does not override a mutator failure. If the mutator permits processing to continue, the header contains the SDK-style status, such as `NO_NETWORK` or `NO_APPROOV_SERVICE`, and participates in message signing. If the mutator throws or returns `false`, the status is not injected.
 
+The token and trace headers are **omitted** when their values are empty — the layer never sends an empty-valued or prefix-only header. `SetUseApproovStatusIfNoToken` is therefore the intended way to make Approov's outcome visible to the backend when no token is available; without it, a request that proceeds without a usable token simply carries no `Approov-Token` header. This matches the reference React Native layer.
+
 ## Token Binding Header
 
 Bind a specific request header's value into the Approov token to tie the token to that credential:
