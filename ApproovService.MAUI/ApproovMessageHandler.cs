@@ -11,15 +11,18 @@ public class ApproovMessageHandler : DelegatingHandler
 
     public ApproovMessageHandler() : base(CreatePlatformHandler()) { }
     public ApproovMessageHandler(HttpMessageHandler inner)
-        : base(DisableInnerAutomaticRedirects(inner)) { }
+        : base(EnsurePinningOnTerminal(DisableInnerAutomaticRedirects(inner))) { }
 
     // Explicit escape hatch for custom terminal handlers whose redirect behavior cannot
     // be inspected. Callers must only set this to true after disabling redirects on the
-    // entire inner chain, so every target re-enters the Approov pipeline.
+    // entire inner chain, so every target re-enters the Approov pipeline. The flag
+    // acknowledges the redirect requirement only: pinning is still installed here for every
+    // terminal handler type that exposes a certificate callback, and its absence is logged
+    // at error level for types that do not.
     public ApproovMessageHandler(HttpMessageHandler inner,
         bool automaticRedirectsAlreadyDisabled)
         : base(automaticRedirectsAlreadyDisabled
-            ? inner
+            ? EnsurePinningOnTerminal(inner)
             : throw new ArgumentException(
                 "The inner handler must have automatic redirects disabled", nameof(inner)))
     { }
@@ -351,36 +354,81 @@ public class ApproovMessageHandler : DelegatingHandler
     }
 #endif
 
+    private static HttpMessageHandler TerminalHandlerOf(HttpMessageHandler inner)
+    {
+        HttpMessageHandler terminal = inner;
+        while (terminal is DelegatingHandler delegating
+            && delegating.InnerHandler != null)
+            terminal = delegating.InnerHandler;
+        return terminal;
+    }
+
+    // Pinning and redirect control are separate concerns, and the escape-hatch constructor
+    // acknowledges only the redirect one. It therefore installed no pinning at all, so even
+    // a well-known handler passed that way — new ApproovMessageHandler(new HttpClientHandler
+    // { AllowAutoRedirect = false }, true) — carried a token and a signature over an unpinned
+    // connection with no error and no log. Both constructors now run this pass, which installs
+    // pinning on every terminal handler type that exposes a certificate callback.
+    private static HttpMessageHandler EnsurePinningOnTerminal(HttpMessageHandler inner)
+    {
+        ArgumentNullException.ThrowIfNull(inner);
+
+        switch (TerminalHandlerOf(inner))
+        {
+            case HttpClientHandler httpClientHandler:
+                EnsurePinning(httpClientHandler);
+                break;
+            case SocketsHttpHandler socketsHttpHandler:
+                EnsurePinning(socketsHttpHandler);
+                break;
+#if ANDROID
+            case Xamarin.Android.Net.AndroidMessageHandler androidMessageHandler:
+                EnsurePinning(androidMessageHandler);
+                break;
+#endif
+#if IOS
+            case NSUrlSessionHandler urlSessionHandler:
+                EnsurePinning(urlSessionHandler);
+                break;
+#endif
+            case var unsupported:
+                // Nothing to install into: this handler type exposes no certificate
+                // callback, so the caller must enforce the Approov pins themselves. Only
+                // reachable through the automaticRedirectsAlreadyDisabled constructor,
+                // because the other one rejects unknown terminal handlers outright.
+                ApproovService.Log(ApproovLogLevel.Error,
+                    $"cannot install Approov pinning on {unsupported.GetType().FullName}: "
+                    + "it exposes no certificate validation callback. Requests through this "
+                    + "handler are tokenized and signed but NOT pin-checked by the service "
+                    + "layer; enforce the Approov pins in the handler itself, for example "
+                    + "with ApproovService.VerifyServerTrust.");
+                break;
+        }
+
+        return inner;
+    }
+
     private static HttpMessageHandler DisableInnerAutomaticRedirects(
         HttpMessageHandler inner)
     {
         ArgumentNullException.ThrowIfNull(inner);
 
-        HttpMessageHandler terminal = inner;
-        while (terminal is DelegatingHandler delegating
-            && delegating.InnerHandler != null)
-            terminal = delegating.InnerHandler;
-
-        switch (terminal)
+        switch (TerminalHandlerOf(inner))
         {
             case HttpClientHandler httpClientHandler:
                 httpClientHandler.AllowAutoRedirect = false;
-                EnsurePinning(httpClientHandler);
                 return inner;
             case SocketsHttpHandler socketsHttpHandler:
                 socketsHttpHandler.AllowAutoRedirect = false;
-                EnsurePinning(socketsHttpHandler);
                 return inner;
 #if ANDROID
             case Xamarin.Android.Net.AndroidMessageHandler androidMessageHandler:
                 androidMessageHandler.AllowAutoRedirect = false;
-                EnsurePinning(androidMessageHandler);
                 return inner;
 #endif
 #if IOS
             case NSUrlSessionHandler urlSessionHandler:
                 urlSessionHandler.AllowAutoRedirect = false;
-                EnsurePinning(urlSessionHandler);
                 return inner;
 #endif
             default:

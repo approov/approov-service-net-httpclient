@@ -65,6 +65,59 @@ public class ApproovMessageHandlerTests : IDisposable
     }
 
     [Fact]
+    public void Constructor_RedirectsAlreadyDisabled_StillInstallsPinning()
+    {
+        // The automaticRedirectsAlreadyDisabled flag acknowledges the redirect requirement
+        // only. It previously bypassed pinning installation entirely, so this documented
+        // constructor produced tokenized, signed requests over an unpinned connection with no
+        // log at all.
+        var inner = new HttpClientHandler { AllowAutoRedirect = false };
+        Assert.Null(inner.ServerCertificateCustomValidationCallback);
+
+        _ = new ApproovMessageHandler(inner, automaticRedirectsAlreadyDisabled: true);
+
+        Assert.NotNull(inner.ServerCertificateCustomValidationCallback);
+    }
+
+    [Fact]
+    public void Constructor_RedirectsAlreadyDisabled_InstallsPinningOnSocketsHttpHandler()
+    {
+        var inner = new SocketsHttpHandler { AllowAutoRedirect = false };
+        Assert.Null(inner.SslOptions.RemoteCertificateValidationCallback);
+
+        _ = new ApproovMessageHandler(inner, automaticRedirectsAlreadyDisabled: true);
+
+        Assert.NotNull(inner.SslOptions.RemoteCertificateValidationCallback);
+    }
+
+    [Fact]
+    public void Constructor_RedirectsAlreadyDisabled_InstallsPinningThroughDelegatingChain()
+    {
+        // Pinning must be installed on the terminal handler, not on the first one seen.
+        var terminal = new HttpClientHandler { AllowAutoRedirect = false };
+        var wrapper = new PassThroughHandler { InnerHandler = terminal };
+
+        _ = new ApproovMessageHandler(wrapper, automaticRedirectsAlreadyDisabled: true);
+
+        Assert.NotNull(terminal.ServerCertificateCustomValidationCallback);
+    }
+
+    [Fact]
+    public void Constructor_RedirectsAlreadyDisabled_UnsupportedTerminalStillAccepted()
+    {
+        // A handler type with no certificate callback cannot be pinned by the layer, so the
+        // escape hatch remains available (test doubles and custom transports depend on it);
+        // the missing pinning is reported at error level instead.
+        var inner = new FakeHandler(HttpStatusCode.OK);
+
+        _ = new ApproovMessageHandler(inner, automaticRedirectsAlreadyDisabled: true);
+    }
+
+    private sealed class PassThroughHandler : DelegatingHandler
+    {
+    }
+
+    [Fact]
     public void Constructor_CustomSocketsHttpHandler_ComposesCallerSuppliedCallback()
     {
         // Leaving a caller-supplied callback in place meant an always-true callback disabled
