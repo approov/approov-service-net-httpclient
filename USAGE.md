@@ -84,8 +84,12 @@ else
 - Centralize app-specific policy without forking the service layer.
 - Add telemetry on rejections or network failures.
 - Skip Approov processing for health checks or local endpoints.
-- Customize pinning decisions per request.
 - Adjust behavior when token or secure string fetches fail.
+
+A mutator **cannot** disable TLS pinning in this layer. `HandlePinningShouldProcessRequest`
+remains on `IApproovServiceMutator` for source compatibility with the other Approov service
+layers, but its return value is **not consulted**: pinning is enforced for every request. This
+is a deliberate divergence from the okhttp and React Native layers, which do honour that hook.
 
 ### Default Behavior
 
@@ -247,20 +251,30 @@ The automatically installed signer computes a SHA-256 `Content-Digest` for a pro
 ApproovService.SetBodyDigestEnabled(false);
 ```
 
-Digest generation occurs inside the signer, so bypassed and unprotected requests are not modified. Required mode can be selected with `SetBodyDigestEnabled(true, required: true)`; a missing, empty, unknown-length, or otherwise non-replayable body then fails the request. When using a custom signing factory, configure its digest directly with `SetBodyDigestConfig`.
+Digest generation occurs inside the signer, so bypassed and unprotected requests are not modified. Required mode can be selected with `SetBodyDigestEnabled(true, required: true)`; a missing, unknown-length (no `Content-Length`, e.g. a streamed or chunked body), or otherwise non-replayable body then fails the request. A **zero-length** body is not a failure: it has a known length and produces the valid digest of an empty payload, per RFC 9421. When using a custom signing factory, configure its digest directly with `SetBodyDigestConfig`.
 
 ## TLS Certificate Pinning
 
 `ApproovMessageHandler` wires TLS pinning automatically. Android preserves the platform callback's certificate validation and checks the complete peer chain. iOS evaluates the original native `SecTrust` and then checks the complete native chain, avoiding a second managed revocation policy. Pins are managed by the Approov cloud and updated dynamically.
 
-If you supply an Android `HttpClientHandler`, use `VerifyServerTrust` and disable automatic redirects so every target is retokenized and resigned:
+If you supply your own handler, `ApproovMessageHandler` installs pinning on it for you —
+`HttpClientHandler`, `SocketsHttpHandler`, `AndroidMessageHandler` and `NSUrlSessionHandler`
+are all covered. You do not need to wire anything by hand:
 
 ```csharp
-handler.AllowAutoRedirect = false;
+handler.AllowAutoRedirect = false;   // done for you as well, for supported handler types
 handler.ServerCertificateCustomValidationCallback =
     (message, cert, chain, errors) =>
         ApproovService.VerifyServerTrust(message, cert, chain, errors);
 ```
+
+**A certificate callback of your own does not replace pinning.** If the handler already carries
+one, Approov pinning is **composed in front of it**: pinning runs first and short-circuits, so a
+pin mismatch rejects the connection without ever consulting your callback, and your callback can
+only further restrict what pinning already accepted. The hand-wired snippet above therefore still
+works (`VerifyServerTrust` is a pure function of the certificate, chain and policy errors, so
+re-running it is harmless), but a permissive callback such as `(_, _, _, _) => true` can no
+longer disable pin enforcement. A composed callback is logged at warning level.
 
 The default constructor is recommended on iOS because it has access to the original native trust object. The custom-handler constructor disables redirects for supported platform handlers and rejects handlers whose redirect behavior cannot be controlled. For another terminal-handler type, first disable its redirects and use `new ApproovMessageHandler(handler, automaticRedirectsAlreadyDisabled: true)` to acknowledge that security requirement explicitly.
 

@@ -96,3 +96,11 @@ are migrating from another Approov service layer that exposed them, use the repl
 | `Prefetch()` | Not provided | Obsolete. Token fetching happens automatically on each protected request; there is nothing to prefetch. |
 | `SetProceedOnNetworkFail(proceed)` | Not provided | Deprecated no-op elsewhere. Network-failure handling is governed by the installed `IApproovServiceMutator` and the failure cache (`SetFailureCacheTTL`) instead. |
 | `SetApproovInterceptorExtensions(callbacks)` | Not provided | Deprecated. Replaced by the mutator model: install an `IApproovServiceMutator` via `SetServiceMutator` to customize per-status request handling. |
+
+## Deliberate divergences from the other service layers
+
+| Behavior | Other layers | This layer |
+|----------|--------------|------------|
+| `IApproovServiceMutator.HandlePinningShouldProcessRequest` | okhttp and React Native consult it and skip pinning for a request when it returns `false`. | **Present but not consulted.** Pinning is enforced for every request; a mutator cannot disable it. Retained so mutator code can be shared across platforms. |
+| Caller-supplied handler with its own TLS callback | Not applicable (no equivalent injection point). | Approov pinning is **composed in front of** the caller's callback, runs first and short-circuits. A permissive callback cannot disable pin enforcement; the composition is logged at warning level. |
+| Synchronous `HttpClient.Send` | Not applicable. | Throws `NotSupportedException` rather than reaching the network unprotected. |

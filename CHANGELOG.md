@@ -3,6 +3,23 @@
 ## [Unreleased]
 
 ### Fixed
+- **A caller's own TLS callback can no longer replace Approov pinning.** The constructors taking a
+  caller-supplied handler installed pinning only when the certificate-callback slot was free, so a
+  permissive callback of the caller's own (including `(_, _, _, _) => true`) left tokenized and
+  signed requests running over an unpinned connection, with no error and no log. Approov pinning is
+  now **composed in front of** any existing callback on `HttpClientHandler`,
+  `SocketsHttpHandler`, `AndroidMessageHandler` and `NSUrlSessionHandler`: it runs first and
+  short-circuits, so a pin mismatch rejects the connection without consulting the caller's
+  callback, and the caller's callback can only further restrict what pinning accepted. Composition
+  is logged at warning level. The hand-wired `VerifyServerTrust` pattern in `USAGE.md` keeps
+  working, because that function is pure. Two unit tests that asserted the old
+  "keep the caller's callback" behavior were replaced.
+- **Caller-supplied `AndroidMessageHandler` and `NSUrlSessionHandler` now get pinning at all.**
+  Both are terminal handlers, and both previously had only `AllowAutoRedirect = false` applied,
+  so a custom transport of either type ran completely unpinned while still carrying a token and
+  signature. Pinning is now installed on both (`ServerCertificateCustomValidationCallback` and
+  `TrustOverrideForUrl` respectively, the latter to keep evaluating the original native
+  `SecTrust`).
 - **Android: intermittent "Unknown approov token fetch result SUCCESS".** On .NET Android the SDK
   `TokenFetchStatus` binds as a `Java.Lang.Enum`, so its managed peer is marshalled across JNI on
   every access; reading the live fetch result repeatedly could observe the status inconsistently
@@ -14,6 +31,24 @@
   (rather than merely reduces) the intermittent case is still pending.
 
 ### Documentation
+- **`HandlePinningShouldProcessRequest` is documented as not consulted.** `USAGE.md` listed
+  "Customize pinning decisions per request" as a reason to use a mutator, but honouring that hook
+  was one of the pinning bypasses closed in 3.5.5, so the hook has no effect here. The bullet is
+  removed, the interface member carries an XML doc saying so, and `REFERENCE.md` gained a
+  "Deliberate divergences from the other service layers" table recording that okhttp and React
+  Native do honour it while this layer does not. The member itself is retained for source
+  compatibility with cross-platform mutator code.
+- **Corrected the required-body-digest contract.** `USAGE.md` said an *empty* body fails in
+  required mode; the code fails only when the body is missing or its length is unknown. A
+  zero-length body has a known length and yields the valid digest of an empty payload per
+  RFC 9421, so the documentation now says missing, unknown-length (streamed/chunked) or
+  non-replayable, and states the zero-length case explicitly.
+- **Refreshed the pinning section of `USAGE.md`** to state that pinning is installed on
+  caller-supplied handlers automatically and composed in front of any existing callback.
+- **`SERVICE_LAYER_VERIFICATION.md` unit-suite count refreshed** (259 at report time, 275 on the
+  2026-08-13 re-run) and the Android build row now records the `NETSDK1202` out-of-support warning
+  emitted when building `net9.0-android` with the .NET 10 SDK (tracked in
+  approov/core-project-approov#712).
 - **Added a badge row, a guarded initialization example, and an obsolete-API section.** The README
   now carries .NET/MAUI/platform/message-signing badges and links to `CHANGELOG.md`. `USAGE.md`
   gained an `Initialization` section showing a `try`/`catch` startup that confirms

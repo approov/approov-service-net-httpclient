@@ -7,7 +7,7 @@ Canonical test repository: `approov/core-service-layers-testing` at `8fa5fd812b2
 
 ## Executive conclusion
 
-The corrected service layer builds and packages successfully and passes its complete 259-test unit suite. Its principal request, TLS pinning, substitution, secure-string, JWT, mutator, and HTTP message-signing paths work in simulator testing. Production-SDK testing successfully reached the protected v3 token-binding endpoint on Android and iOS, and the v5 installation-message-signing endpoint on Android.
+The corrected service layer builds and packages successfully and passes its complete unit suite (259 tests at the time of this report; **275 as of the 2026-08-13 re-run**, after the token-fetch snapshot and pinning-composition tests were added). Its principal request, TLS pinning, substitution, secure-string, JWT, mutator, and HTTP message-signing paths work in simulator testing. Production-SDK testing successfully reached the protected v3 token-binding endpoint on Android and iOS, and the v5 installation-message-signing endpoint on Android.
 
 The 20 July fixes resolved the actionable implementation findings:
 
@@ -41,8 +41,8 @@ The live SPKI pin observed during this run was `cs+6+FJ1NNBVMPf4Nx32VDbYpPWc884K
 
 | Verification | Result | Evidence |
 |---|---:|---|
-| Complete unit suite | PASS | 259 passed, 0 failed |
-| Android Release service build | PASS | 0 warnings, 0 errors |
+| Complete unit suite | PASS | 259 passed, 0 failed at report time; **275 passed, 0 failed on the 2026-08-13 re-run** |
+| Android Release service build | PASS | 0 warnings, 0 errors under the .NET 9 SDK. Under the .NET 10 SDK (10.0.302) the build still succeeds but emits `warning NETSDK1202: The workload 'net9.0-android' is out of support`; tracked in approov/core-project-approov#712 |
 | iOS simulator Release service/binding build | PASS | 0 warnings, 0 errors |
 | Service NuGet package | PASS | `Approov.Service.Maui.3.5.5.nupkg`, ZIP integrity clean |
 | iOS binding NuGet package | PASS | `Approov.iOS.Binding.3.5.5.nupkg`, ZIP integrity clean |
@@ -191,7 +191,7 @@ The functional documentation is substantial. The following content-requirement g
 - A connected physical iOS device with the production SDK is still required to prove real installation-key v5 enforcement end to end.
 - The v3 backend negative control for a valid token with an intentionally wrong binding hash was not available.
 - Android production endpoint account-key signing was not exercised; it is covered by unit tests and the iOS mini-SDK device flow.
-- Redirect behavior, request concurrency, and failure-cache coalescing are covered by the 259-test unit suite but were not repeated over the simulator network harness.
+- Redirect behavior, request concurrency, and failure-cache coalescing are covered by the unit suite but were not repeated over the simulator network harness.
 - The substitution matrix did not separately exercise every empty/single-character/long value combination, although normal secure strings and an 18 KB custom JWT were tested.
 - No live Approov administration changes were made; deterministic statuses and pins came from the canonical mini-SDK.
 - Cross-service-layer initialization in the same process is not meaningful in this standalone MAUI consumer and was not exercised.

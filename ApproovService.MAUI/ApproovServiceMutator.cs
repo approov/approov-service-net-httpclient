@@ -16,6 +16,13 @@ public interface IApproovServiceMutator
     bool HandleInterceptorQueryParamSubstitutionResult(IApproovTokenFetchResult result, string queryKey);
     HttpRequestMessage HandleInterceptorProcessedRequest(HttpRequestMessage request,
                                                          ApproovRequestMutations changes);
+    /// <summary>
+    /// NOT CONSULTED in this layer. Kept for source compatibility with the okhttp and React
+    /// Native mutator interfaces, which do honour it. TLS pinning here is enforced for every
+    /// request and cannot be switched off by a mutator: honouring this hook was one of the
+    /// pinning bypasses closed in 3.5.5. Implement it if you share mutator code across
+    /// platforms; the return value has no effect on .NET MAUI.
+    /// </summary>
     bool HandlePinningShouldProcessRequest(HttpRequestMessage request);
 }
 
