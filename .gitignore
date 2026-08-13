@@ -6,3 +6,9 @@ obj/
 *.suo
 *.ncrunchsolution
 TestResults/
+
+# Proprietary Approov SDK binaries — fetched with `approov sdk -getLibrary`, never committed.
+# See libs/README.md and iOS.Binding/libs/README.md.
+libs/approov.aar
+iOS.Binding/libs/Approov.xcframework/
+iOS.MAUI/iOS.MAUI/Approov.xcframework/

@@ -34,11 +34,32 @@ Please see the [MAUI HttpClient](https://github.com/approov/quickstart-maui-http
 ## Structure
 
 - `ApproovService.MAUI` — the service layer, multi-targeting `net9.0-android` and `net9.0-ios`
-- `iOS.Binding` — Objective-C binding project for the bundled `Approov.xcframework`
-- `libs/approov.aar` — the bundled Approov Android SDK
+- `iOS.Binding` — Objective-C binding project over the Approov iOS SDK (`Approov.xcframework`)
+- `libs/` — where you place the Approov Android SDK (`approov.aar`); see [libs/README.md](libs/README.md)
+- `iOS.Binding/libs/` — where you place `Approov.xcframework`; see [iOS.Binding/libs/README.md](iOS.Binding/libs/README.md)
 - `ApproovService.MAUI.Tests` — xUnit test suite over the shared (platform-independent) code
 
 ## Installation
+
+### 1. Provide the Approov SDK binaries
+
+This repository contains only the wrapper source (MIT). The Approov SDK itself is proprietary
+and is **not** committed here, so you fetch it from your own Approov account with the
+[`approov` CLI](https://approov.io/docs/latest/approov-installation/) before building:
+
+```bash
+# from the repository root
+approov sdk -getLibrary libs/approov.aar                              # Android
+approov sdk -getLibrary iOS.Binding/libs/Approov.xcframework          # iOS
+```
+
+This service layer was tested against Approov SDK **3.5.3**. Each destination directory has a
+README with the exact expectations, verification commands and version caveats:
+[libs/README.md](libs/README.md) (Android) and
+[iOS.Binding/libs/README.md](iOS.Binding/libs/README.md) (iOS — read the Objective Sharpie
+version-drift warning if you use a version other than 3.5.3).
+
+### 2. Reference the service layer
 
 Until the `Approov.Service.Maui` NuGet package is published, reference the project directly
 from your app's `.csproj`:
@@ -46,9 +67,6 @@ from your app's `.csproj`:
 ```xml
 <ProjectReference Include="path\to\approov-service-net-httpclient\ApproovService.MAUI\ApproovService.MAUI.csproj" />
 ```
-
-The native Approov SDKs for both platforms are included in this repository, so no additional
-setup is required.
 
 ## API Reference
 
