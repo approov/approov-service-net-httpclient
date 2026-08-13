@@ -14,6 +14,15 @@
   is logged at warning level. The hand-wired `VerifyServerTrust` pattern in `USAGE.md` keeps
   working, because that function is pure. Two unit tests that asserted the old
   "keep the caller's callback" behavior were replaced.
+- **The `automaticRedirectsAlreadyDisabled: true` constructor no longer skips pinning.** That flag
+  acknowledges the redirect requirement only, but the constructor passed the handler straight
+  through, so a documented public path — including
+  `new ApproovMessageHandler(new HttpClientHandler { AllowAutoRedirect = false }, true)` — produced
+  tokenized, signed requests over an unpinned connection with no error and no log. Pinning
+  installation is now a separate pass run by both constructors, applied to the terminal handler of
+  a `DelegatingHandler` chain. A terminal type that exposes no certificate callback still cannot be
+  pinned by the layer (the escape hatch is required for test doubles and custom transports), but it
+  is now reported at **error** level naming the type, instead of failing silently.
 - **Caller-supplied `AndroidMessageHandler` and `NSUrlSessionHandler` now get pinning at all.**
   Both are terminal handlers, and both previously had only `AllowAutoRedirect = false` applied,
   so a custom transport of either type ran completely unpinned while still carrying a token and
@@ -35,9 +44,9 @@
   "Customize pinning decisions per request" as a reason to use a mutator, but honouring that hook
   was one of the pinning bypasses closed in 3.5.5, so the hook has no effect here. The bullet is
   removed, the interface member carries an XML doc saying so, and `REFERENCE.md` gained a
-  "Deliberate divergences from the other service layers" table recording that okhttp and React
-  Native do honour it while this layer does not. The member itself is retained for source
-  compatibility with cross-platform mutator code.
+  "Deliberate divergences from the other service layers" table recording that the okhttp,
+  retrofit, HttpsUrlConnection and URLSession-family layers do honour it while this layer does
+  not. The member itself is retained for source compatibility with cross-platform mutator code.
 - **Corrected the required-body-digest contract.** `USAGE.md` said an *empty* body fails in
   required mode; the code fails only when the body is missing or its length is unknown. A
   zero-length body has a known length and yields the valid digest of an empty payload per

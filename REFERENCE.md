@@ -53,7 +53,7 @@
 | Type | Description |
 |------|-------------|
 | `ApproovHttpClient` | `HttpClient` subclass wired to `ApproovMessageHandler`. |
-| `ApproovMessageHandler` | `DelegatingHandler` calling `UpdateRequestWithApproov`; redirects re-enter processing, stale security headers are removed, and cross-origin credentials—including configured substitution query parameters—are stripped conservatively. Known custom terminal handlers have redirects disabled automatically; other types require the explicit `automaticRedirectsAlreadyDisabled: true` constructor after caller-side configuration. |
+| `ApproovMessageHandler` | `DelegatingHandler` calling `UpdateRequestWithApproov`; redirects re-enter processing, stale security headers are removed, and cross-origin credentials—including configured substitution query parameters—are stripped conservatively. Known custom terminal handlers have redirects disabled automatically; other types require the explicit `automaticRedirectsAlreadyDisabled: true` constructor after caller-side configuration. Both constructors install pinning on the terminal handler when its type exposes a certificate callback (`HttpClientHandler`, `SocketsHttpHandler`, `AndroidMessageHandler`, `NSUrlSessionHandler`), composing it in front of any callback already present; a terminal type with no callback slot cannot be pinned by the layer and is logged at error level. |
 | `ApproovService.VerifyServerTrust(request, cert, chain, errors)` | Android/custom-handler TLS callback that preserves platform validation and then checks Approov pins across the validated chain. |
 | `ApproovService.VerifyPinning(request, chainCertificates)` | Applies Approov pinning to an `IReadOnlyList<X509Certificate2>` certificate chain. |
 | `ApproovService.UpdateRequestWithApproov(request)` | Core request mutation; returns `ApproovUpdateResponse`. |
@@ -101,6 +101,6 @@ are migrating from another Approov service layer that exposed them, use the repl
 
 | Behavior | Other layers | This layer |
 |----------|--------------|------------|
-| `IApproovServiceMutator.HandlePinningShouldProcessRequest` | okhttp and React Native consult it and skip pinning for a request when it returns `false`. | **Present but not consulted.** Pinning is enforced for every request; a mutator cannot disable it. Retained so mutator code can be shared across platforms. |
+| `IApproovServiceMutator.HandlePinningShouldProcessRequest` | okhttp, retrofit, HttpsUrlConnection and the URLSession-family layers consult it and skip pinning for a request when it returns `false`. | **Present but not consulted.** Pinning is enforced for every request; a mutator cannot disable it. Retained so mutator code can be shared across platforms. |
 | Caller-supplied handler with its own TLS callback | Not applicable (no equivalent injection point). | Approov pinning is **composed in front of** the caller's callback, runs first and short-circuits. A permissive callback cannot disable pin enforcement; the composition is logged at warning level. |
 | Synchronous `HttpClient.Send` | Not applicable. | Throws `NotSupportedException` rather than reaching the network unprotected. |

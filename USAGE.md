@@ -89,7 +89,8 @@ else
 A mutator **cannot** disable TLS pinning in this layer. `HandlePinningShouldProcessRequest`
 remains on `IApproovServiceMutator` for source compatibility with the other Approov service
 layers, but its return value is **not consulted**: pinning is enforced for every request. This
-is a deliberate divergence from the okhttp and React Native layers, which do honour that hook.
+is a deliberate divergence from the okhttp, retrofit, HttpsUrlConnection and URLSession-family
+layers, which do skip pinning for a request when that hook returns `false`.
 
 ### Default Behavior
 
@@ -277,6 +278,8 @@ re-running it is harmless), but a permissive callback such as `(_, _, _, _) => t
 longer disable pin enforcement. A composed callback is logged at warning level.
 
 The default constructor is recommended on iOS because it has access to the original native trust object. The custom-handler constructor disables redirects for supported platform handlers and rejects handlers whose redirect behavior cannot be controlled. For another terminal-handler type, first disable its redirects and use `new ApproovMessageHandler(handler, automaticRedirectsAlreadyDisabled: true)` to acknowledge that security requirement explicitly.
+
+That flag acknowledges **redirects only, not pinning**. Pinning is installed by both constructors, and on the terminal handler of a `DelegatingHandler` chain, whenever the terminal type exposes a certificate callback. If it does not — a hand-written `HttpMessageHandler`, a test double, a transport of your own — the layer cannot pin it and says so at **error** level: requests through that handler are tokenized and signed but *not* pin-checked by the service layer, and you must enforce the Approov pins inside the handler yourself (`ApproovService.VerifyServerTrust` is public for exactly this).
 
 ## Failure Cache
 
