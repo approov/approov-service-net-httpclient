@@ -275,15 +275,26 @@ public class ApproovMessageHandler : DelegatingHandler
     // The parameterless constructor installs Approov pinning via CreatePlatformHandler, but
     // the constructors that accept a caller-supplied handler previously installed none, so
     // requests carried a valid token and signature over an unpinned connection with no error
-    // and no log. Install it when the slot is free. If the caller already set a callback we
-    // leave theirs alone, because USAGE.md documents wiring VerifyServerTrust by hand and
-    // overwriting that would break integrations that are already correct.
+    // and no log.
+    //
+    // A caller-supplied callback is composed with Approov pinning rather than left in place:
+    // skipping installation meant a permissive callback (including `(_, _, _, _) => true`)
+    // silently disabled pin enforcement while requests were still tokenized and signed.
+    // Approov pinning always runs first and short-circuits, so a pin failure rejects the
+    // connection without consulting the caller's callback. The callback documented in
+    // USAGE.md keeps working: it re-runs VerifyServerTrust, which is a pure function of the
+    // supplied certificate, chain and policy errors.
     private static void EnsurePinning(HttpClientHandler handler)
     {
-        if (handler.ServerCertificateCustomValidationCallback != null) return;
+        var existing = handler.ServerCertificateCustomValidationCallback;
+        if (existing != null)
+            ApproovService.Log(ApproovLogLevel.Warning,
+                "caller-supplied ServerCertificateCustomValidationCallback found; "
+                + "Approov pinning now runs before it and both must accept the connection");
         handler.ServerCertificateCustomValidationCallback =
             (message, cert, chain, errors) =>
-                ApproovService.VerifyServerTrust(message, cert, chain, errors);
+                ApproovService.VerifyServerTrust(message, cert, chain, errors)
+                && (existing == null || existing(message, cert, chain, errors));
     }
 
     // SocketsHttpHandler validates through SslOptions.RemoteCertificateValidationCallback,
@@ -292,11 +303,53 @@ public class ApproovMessageHandler : DelegatingHandler
     // too. Verified against the framework rather than assumed.
     private static void EnsurePinning(SocketsHttpHandler handler)
     {
-        if (handler.SslOptions.RemoteCertificateValidationCallback != null) return;
+        var existing = handler.SslOptions.RemoteCertificateValidationCallback;
+        if (existing != null)
+            ApproovService.Log(ApproovLogLevel.Warning,
+                "caller-supplied SslOptions.RemoteCertificateValidationCallback found; "
+                + "Approov pinning now runs before it and both must accept the connection");
         handler.SslOptions.RemoteCertificateValidationCallback =
             (sender, cert, chain, errors) =>
-                ApproovService.VerifyServerTrustForStream(sender, cert, chain, errors);
+                ApproovService.VerifyServerTrustForStream(sender, cert, chain, errors)
+                && (existing == null || existing(sender, cert, chain, errors));
     }
+
+#if ANDROID
+    // AndroidMessageHandler is the default MAUI transport on Android and terminates its own
+    // chain, so it reached this switch with redirects disabled and no pinning at all: the
+    // same hole the HttpClientHandler/SocketsHttpHandler cases were fixed for. It exposes the
+    // request-aware callback, so the identical composition applies.
+    private static void EnsurePinning(Xamarin.Android.Net.AndroidMessageHandler handler)
+    {
+        var existing = handler.ServerCertificateCustomValidationCallback;
+        if (existing != null)
+            ApproovService.Log(ApproovLogLevel.Warning,
+                "caller-supplied AndroidMessageHandler certificate callback found; "
+                + "Approov pinning now runs before it and both must accept the connection");
+        handler.ServerCertificateCustomValidationCallback =
+            (message, cert, chain, errors) =>
+                ApproovService.VerifyServerTrust(message, cert, chain, errors)
+                && (existing == null || existing(message, cert, chain, errors));
+    }
+#endif
+
+#if IOS
+    // A caller-supplied NSUrlSessionHandler also received no pinning. Use TrustOverrideForUrl
+    // rather than ServerCertificateCustomValidationCallback for the reason documented in
+    // ApproovIosHttpMessageHandler: it evaluates the original native SecTrust instead of
+    // applying the stricter managed X509Chain policy.
+    private static void EnsurePinning(NSUrlSessionHandler handler)
+    {
+        var existing = handler.TrustOverrideForUrl;
+        if (existing != null)
+            ApproovService.Log(ApproovLogLevel.Warning,
+                "caller-supplied NSUrlSessionHandler.TrustOverrideForUrl found; "
+                + "Approov pinning now runs before it and both must accept the connection");
+        handler.TrustOverrideForUrl = (sender, requestUrl, serverTrust) =>
+            ApproovService.VerifyNativeServerTrust(requestUrl, serverTrust)
+            && (existing == null || existing(sender, requestUrl, serverTrust));
+    }
+#endif
 
     private static HttpMessageHandler DisableInnerAutomaticRedirects(
         HttpMessageHandler inner)
@@ -321,11 +374,13 @@ public class ApproovMessageHandler : DelegatingHandler
 #if ANDROID
             case Xamarin.Android.Net.AndroidMessageHandler androidMessageHandler:
                 androidMessageHandler.AllowAutoRedirect = false;
+                EnsurePinning(androidMessageHandler);
                 return inner;
 #endif
 #if IOS
             case NSUrlSessionHandler urlSessionHandler:
                 urlSessionHandler.AllowAutoRedirect = false;
+                EnsurePinning(urlSessionHandler);
                 return inner;
 #endif
             default:

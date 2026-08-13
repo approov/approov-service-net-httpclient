@@ -65,27 +65,42 @@ public class ApproovMessageHandlerTests : IDisposable
     }
 
     [Fact]
-    public void Constructor_CustomSocketsHttpHandler_KeepsCallerSuppliedCallback()
+    public void Constructor_CustomSocketsHttpHandler_ComposesCallerSuppliedCallback()
     {
+        // Leaving a caller-supplied callback in place meant an always-true callback disabled
+        // pin enforcement while requests were still tokenized and signed. Approov pinning is
+        // composed in front of it instead.
+        bool callerInvoked = false;
         System.Net.Security.RemoteCertificateValidationCallback callerCallback =
-            (sender, cert, chain, errors) => true;
+            (sender, cert, chain, errors) => { callerInvoked = true; return true; };
         var inner = new SocketsHttpHandler();
         inner.SslOptions.RemoteCertificateValidationCallback = callerCallback;
 
         _ = new ApproovMessageHandler(inner);
 
-        Assert.Same(callerCallback, inner.SslOptions.RemoteCertificateValidationCallback);
+        var installed = inner.SslOptions.RemoteCertificateValidationCallback;
+        Assert.NotNull(installed);
+        Assert.NotSame(callerCallback, installed);
+
+        // A certificate that failed normal TLS validation is rejected by Approov first, so
+        // the caller's callback never gets the chance to accept it.
+        Assert.False(installed!(this, null, null,
+            System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch));
+        Assert.False(callerInvoked);
     }
 
     [Fact]
-    public void Constructor_CustomHttpClientHandler_KeepsCallerSuppliedCallback()
+    public void Constructor_CustomHttpClientHandler_ComposesCallerSuppliedCallback()
     {
-        // USAGE.md documents wiring VerifyServerTrust by hand, so an existing callback is
-        // left alone rather than overwritten.
+        // USAGE.md documents wiring VerifyServerTrust by hand; that callback keeps working
+        // because VerifyServerTrust is a pure function of the supplied certificate, chain and
+        // policy errors. What is no longer possible is replacing pinning with a permissive
+        // callback of one's own.
+        bool callerInvoked = false;
         Func<HttpRequestMessage, System.Security.Cryptography.X509Certificates.X509Certificate2?,
             System.Security.Cryptography.X509Certificates.X509Chain?,
             System.Net.Security.SslPolicyErrors, bool> callerCallback =
-            (request, cert, chain, errors) => true;
+            (request, cert, chain, errors) => { callerInvoked = true; return true; };
         var inner = new HttpClientHandler
         {
             ServerCertificateCustomValidationCallback = callerCallback
@@ -93,8 +108,69 @@ public class ApproovMessageHandlerTests : IDisposable
 
         _ = new ApproovMessageHandler(inner);
 
-        Assert.Same(callerCallback, inner.ServerCertificateCustomValidationCallback);
+        var installed = inner.ServerCertificateCustomValidationCallback;
+        Assert.NotNull(installed);
+        Assert.NotSame(callerCallback, installed);
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
+        Assert.False(installed!(request, null, null,
+            System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch));
+        Assert.False(callerInvoked);
     }
+
+    [Fact]
+    public void Constructor_CustomHttpClientHandler_CallerCallbackStillRejects()
+    {
+        // Composition is an AND: with pinning satisfied, a caller callback that refuses the
+        // connection is still honoured.
+        using var cert = CreateSelfSignedCert();
+        ApproovService.Initialize("dummy-config");
+        ApproovService.PinsJson = $"{{\"example.com\":[\"{PinForCert(cert)}\"]}}";
+
+        bool callerInvoked = false;
+        var inner = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback =
+                (request, c, chain, errors) => { callerInvoked = true; return false; }
+        };
+
+        _ = new ApproovMessageHandler(inner);
+
+        var installed = inner.ServerCertificateCustomValidationCallback;
+        var req = new HttpRequestMessage(HttpMethod.Get, "https://example.com");
+        using var builtChain = ChainFor(cert);
+
+        Assert.False(installed!(req, cert, builtChain,
+            System.Net.Security.SslPolicyErrors.None));
+        Assert.True(callerInvoked);
+    }
+
+    private static System.Security.Cryptography.X509Certificates.X509Certificate2
+        CreateSelfSignedCert()
+    {
+        using var rsa = RSA.Create(2048);
+        var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+            "CN=test", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        return request.CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1),
+            DateTimeOffset.UtcNow.AddDays(365));
+    }
+
+    private static System.Security.Cryptography.X509Certificates.X509Chain ChainFor(
+        System.Security.Cryptography.X509Certificates.X509Certificate2 cert)
+    {
+        var chain = new System.Security.Cryptography.X509Certificates.X509Chain();
+        chain.ChainPolicy.RevocationMode =
+            System.Security.Cryptography.X509Certificates.X509RevocationMode.NoCheck;
+        chain.ChainPolicy.VerificationFlags = System.Security.Cryptography.X509Certificates
+            .X509VerificationFlags.AllowUnknownCertificateAuthority;
+        chain.Build(cert);
+        return chain;
+    }
+
+    private static string PinForCert(
+        System.Security.Cryptography.X509Certificates.X509Certificate2 cert)
+        => Convert.ToBase64String(
+            SHA256.HashData(cert.PublicKey.ExportSubjectPublicKeyInfo()));
 
     [Fact]
     public void Send_Synchronous_ThrowsRatherThanBypassingApproov()
