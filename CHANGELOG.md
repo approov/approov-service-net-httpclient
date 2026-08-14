@@ -54,10 +54,12 @@
   non-replayable, and states the zero-length case explicitly.
 - **Refreshed the pinning section of `USAGE.md`** to state that pinning is installed on
   caller-supplied handlers automatically and composed in front of any existing callback.
-- **`SERVICE_LAYER_VERIFICATION.md` unit-suite count refreshed** (259 at report time, 275 on the
-  2026-08-13 re-run) and the Android build row now records the `NETSDK1202` out-of-support warning
-  emitted when building `net9.0-android` with the .NET 10 SDK (tracked in
-  approov/core-project-approov#712).
+- **Removed the internal verification report** (`SERVICE_LAYER_VERIFICATION.md`). It recorded an
+  internal test run, including internal test-service hostnames and an observed SPKI pin value, which
+  do not belong in a customer-facing repository. Verification records are kept internally.
+- **Noted the .NET 10 SDK build warning.** Building `net9.0-android` with the .NET 10 SDK still
+  succeeds but emits `warning NETSDK1202: The workload 'net9.0-android' is out of support`. .NET 10
+  support is tracked separately.
 - **Added a badge row, a guarded initialization example, and an obsolete-API section.** The README
   now carries .NET/MAUI/platform/message-signing badges and links to `CHANGELOG.md`. `USAGE.md`
   gained an `Initialization` section showing a `try`/`catch` startup that confirms

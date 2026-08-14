@@ -63,14 +63,11 @@ So a build that succeeds is not by itself proof that the binding matches the SDK
 supplied. If you must use a version other than 3.5.3, regenerate the binding with Objective
 Sharpie against that xcframework's headers and diff it against the committed files.
 
-Automating that check in CI is tracked in
-[#715](https://github.com/approov/core-project-approov/issues/715).
+Automating that check in CI is planned.
 
 ## Why the binary is not committed
 
-Tracked in [#713](https://github.com/approov/core-project-approov/issues/713) — the SDK will
-be distributed as a NuGet package
-([#715](https://github.com/approov/core-project-approov/issues/715)), which removes this
-manual step. Note that `iOS.Binding.csproj` currently declares
-`<PackageLicenseExpression>MIT</PackageLicenseExpression>`, which is wrong for a package
-carrying the proprietary SDK — also covered by #715.
+The SDK is Approov's proprietary product and this repository is MIT-licensed wrapper source, so the
+two cannot ship together. Distributing the SDK as a NuGet package, which removes this manual step, is
+planned; packing is disabled on this project until then, because a package built from it would embed
+the proprietary xcframework.

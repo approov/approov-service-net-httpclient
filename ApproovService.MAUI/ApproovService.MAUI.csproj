@@ -8,8 +8,7 @@
     <Description>Approov service layer for .NET MAUI (Android + iOS)</Description>
     <!-- MIT is correct for this wrapper's own source. Packing is disabled because packing today
          would embed the proprietary ../libs/approov.aar (AndroidLibrary below) into an
-         MIT-labelled package. Enable once the SDK arrives as a package reference
-         (see approov/core-project-approov#714, #715). -->
+         MIT-labelled package. Enable once the SDK arrives as a package reference. -->
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
     <PackageProjectUrl>https://approov.io</PackageProjectUrl>

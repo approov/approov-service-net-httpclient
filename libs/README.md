@@ -47,7 +47,6 @@ another version and see a behavioural difference, mention the version when repor
 
 ## Why the binary is not committed
 
-Tracked in [#713](https://github.com/approov/core-project-approov/issues/713) — the SDK will
-be distributed as a NuGet package
-([#715](https://github.com/approov/core-project-approov/issues/715)), which removes this
-manual step.
+The SDK is Approov's proprietary product and this repository is MIT-licensed wrapper source, so the
+two cannot ship together. Distributing the SDK as a NuGet package, which removes this manual step, is
+planned.

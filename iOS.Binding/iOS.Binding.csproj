@@ -10,7 +10,7 @@
     <Description>Approov SDK native binding for .NET iOS</Description>
     <!-- No license expression: a package built from this project embeds Approov.xcframework,
          which is proprietary and NOT MIT. Packing is disabled until the package is produced
-         centrally with the correct proprietary license metadata (see approov/core-project-approov#715). -->
+         centrally with the correct proprietary license metadata. -->
     <IsPackable>false</IsPackable>
     <PackageProjectUrl>https://approov.io</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
