@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<metadata>
+  <!-- Preserve the SDK's obfuscated accessibility tracker return type. -->
+  <attr path="/api/package[@name='pv']/interface[@name='a']"
+        name="obfuscated">false</attr>
+  <!-- Match the managed Binder base member's visibility and override semantics. -->
+  <attr path="/api/package[@name='com.criticalblue.approovsdk.isoproc']/class[@name='IIsolatedService.Stub']/method[@name='onTransact']"
+        name="visibility">protected</attr>
+  <attr path="/api/package[@name='com.criticalblue.approovsdk.isoproc']/class[@name='IIsolatedService.Stub']/method[@name='onTransact']"
+        name="managedOverride">override</attr>
+</metadata>

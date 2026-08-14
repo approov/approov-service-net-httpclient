@@ -1,0 +1,184 @@
+// ApproovService.MAUI/ApproovServiceMutator.cs
+using System.Net.Http;
+using System.Text.RegularExpressions;
+
+namespace Approov;
+
+public interface IApproovServiceMutator
+{
+    void HandlePrecheckResult(IApproovTokenFetchResult result);
+    void HandleFetchTokenResult(IApproovTokenFetchResult result);
+    void HandleFetchSecureStringResult(IApproovTokenFetchResult result, string operation, string key);
+    void HandleFetchCustomJWTResult(IApproovTokenFetchResult result);
+    bool HandleInterceptorShouldProcessRequest(HttpRequestMessage request);
+    bool HandleInterceptorFetchTokenResult(IApproovTokenFetchResult result, string url);
+    bool HandleInterceptorHeaderSubstitutionResult(IApproovTokenFetchResult result, string header);
+    bool HandleInterceptorQueryParamSubstitutionResult(IApproovTokenFetchResult result, string queryKey);
+    HttpRequestMessage HandleInterceptorProcessedRequest(HttpRequestMessage request,
+                                                         ApproovRequestMutations changes);
+    /// <summary>
+    /// NOT CONSULTED in this layer. Kept for source compatibility with the okhttp and React
+    /// Native mutator interfaces, which do honour it. TLS pinning here is enforced for every
+    /// request and cannot be switched off by a mutator: honouring this hook was one of the
+    /// pinning bypasses closed in 3.5.5. Implement it if you share mutator code across
+    /// platforms; the return value has no effect on .NET MAUI.
+    /// </summary>
+    bool HandlePinningShouldProcessRequest(HttpRequestMessage request);
+}
+
+public class ApproovServiceMutatorDefault : IApproovServiceMutator
+{
+    public static readonly ApproovServiceMutatorDefault Shared = new();
+    public ApproovServiceMutatorDefault() { }
+
+    public virtual void HandlePrecheckResult(IApproovTokenFetchResult r)
+    {
+        switch (r.Status)
+        {
+            case ApproovTokenFetchStatus.Rejected:
+                throw new RejectionException("precheck: rejected", r.ARC, r.RejectionReasons);
+            case ApproovTokenFetchStatus.NoNetwork:
+            case ApproovTokenFetchStatus.PoorNetwork:
+            case ApproovTokenFetchStatus.MitmDetected:
+                throw new NetworkingErrorException("precheck network error: " + r.Status);
+            case ApproovTokenFetchStatus.Success:
+            case ApproovTokenFetchStatus.UnknownKey:
+                return;
+            default:
+                throw new PermanentException("precheck: " + r.Status);
+        }
+    }
+
+    public virtual void HandleFetchTokenResult(IApproovTokenFetchResult r)
+    {
+        switch (r.Status)
+        {
+            case ApproovTokenFetchStatus.Success:
+                return;
+            case ApproovTokenFetchStatus.NoNetwork:
+            case ApproovTokenFetchStatus.PoorNetwork:
+            case ApproovTokenFetchStatus.MitmDetected:
+                throw new NetworkingErrorException("fetchToken network error: " + r.Status);
+            default:
+                throw new PermanentException("fetchToken: " + r.Status);
+        }
+    }
+
+    public virtual void HandleFetchSecureStringResult(
+        IApproovTokenFetchResult r, string operation, string key)
+    {
+        switch (r.Status)
+        {
+            case ApproovTokenFetchStatus.Rejected:
+                throw new RejectionException($"fetchSecureString {operation} for {key}: rejected",
+                    r.ARC, r.RejectionReasons);
+            case ApproovTokenFetchStatus.NoNetwork:
+            case ApproovTokenFetchStatus.PoorNetwork:
+            case ApproovTokenFetchStatus.MitmDetected:
+                throw new NetworkingErrorException($"fetchSecureString {operation} for {key}: " + r.Status);
+            case ApproovTokenFetchStatus.Success:
+            case ApproovTokenFetchStatus.UnknownKey:
+                return;
+            default:
+                throw new PermanentException($"fetchSecureString {operation} for {key}: " + r.Status);
+        }
+    }
+
+    public virtual void HandleFetchCustomJWTResult(IApproovTokenFetchResult r)
+    {
+        switch (r.Status)
+        {
+            case ApproovTokenFetchStatus.Rejected:
+                throw new RejectionException("fetchCustomJWT: rejected", r.ARC, r.RejectionReasons);
+            case ApproovTokenFetchStatus.NoNetwork:
+            case ApproovTokenFetchStatus.PoorNetwork:
+            case ApproovTokenFetchStatus.MitmDetected:
+                throw new NetworkingErrorException("fetchCustomJWT network error: " + r.Status);
+            case ApproovTokenFetchStatus.Success:
+                return;
+            default:
+                throw new PermanentException("fetchCustomJWT: " + r.Status);
+        }
+    }
+
+    public virtual bool HandleInterceptorShouldProcessRequest(HttpRequestMessage request)
+    {
+        string urlString = request.RequestUri?.AbsoluteUri ?? "";
+        foreach (var (_, regex) in ApproovService.GetExclusionURLRegexs())
+        {
+            if (regex.IsMatch(urlString)) return false;
+        }
+        return true;
+    }
+
+    public virtual bool HandleInterceptorFetchTokenResult(
+        IApproovTokenFetchResult r, string url)
+    {
+        switch (r.Status)
+        {
+            case ApproovTokenFetchStatus.Success:
+                return true;
+            case ApproovTokenFetchStatus.NoNetwork:
+            case ApproovTokenFetchStatus.PoorNetwork:
+            case ApproovTokenFetchStatus.MitmDetected:
+                throw new NetworkingErrorException($"token fetch for {url}: " + r.Status);
+            case ApproovTokenFetchStatus.NoApproovService:
+                return ApproovService.GetUseApproovStatusIfNoToken();
+            case ApproovTokenFetchStatus.UnknownUrl:
+            case ApproovTokenFetchStatus.UnprotectedUrl:
+                return false;
+            case ApproovTokenFetchStatus.Rejected:
+                throw new RejectionException($"token fetch for {url}: rejected", r.ARC, r.RejectionReasons);
+            default:
+                throw new PermanentException($"token fetch for {url}: " + r.Status);
+        }
+    }
+
+    public virtual bool HandleInterceptorHeaderSubstitutionResult(
+        IApproovTokenFetchResult r, string header)
+    {
+        switch (r.Status)
+        {
+            case ApproovTokenFetchStatus.Success:
+                return true;
+            case ApproovTokenFetchStatus.Rejected:
+                throw new RejectionException($"header substitution for {header}: rejected",
+                    r.ARC, r.RejectionReasons);
+            case ApproovTokenFetchStatus.NoNetwork:
+            case ApproovTokenFetchStatus.PoorNetwork:
+            case ApproovTokenFetchStatus.MitmDetected:
+                return false;
+            case ApproovTokenFetchStatus.UnknownKey:
+                return false;
+            default:
+                throw new PermanentException($"header substitution for {header}: " + r.Status);
+        }
+    }
+
+    public virtual bool HandleInterceptorQueryParamSubstitutionResult(
+        IApproovTokenFetchResult r, string queryKey)
+    {
+        switch (r.Status)
+        {
+            case ApproovTokenFetchStatus.Success:
+                return true;
+            case ApproovTokenFetchStatus.Rejected:
+                throw new RejectionException($"query param substitution for {queryKey}: rejected",
+                    r.ARC, r.RejectionReasons);
+            case ApproovTokenFetchStatus.NoNetwork:
+            case ApproovTokenFetchStatus.PoorNetwork:
+            case ApproovTokenFetchStatus.MitmDetected:
+                return false;
+            case ApproovTokenFetchStatus.UnknownKey:
+                return false;
+            default:
+                throw new PermanentException($"query param substitution for {queryKey}: " + r.Status);
+        }
+    }
+
+    public virtual HttpRequestMessage HandleInterceptorProcessedRequest(
+        HttpRequestMessage request, ApproovRequestMutations changes)
+        => request;
+
+    public virtual bool HandlePinningShouldProcessRequest(HttpRequestMessage request) => true;
+}

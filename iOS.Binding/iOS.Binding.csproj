@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-ios</TargetFramework>
+    <RootNamespace>ApproovSDK</RootNamespace>
+    <AssemblyName>Approov.iOS.Binding</AssemblyName>
+    <IsBindingProject>true</IsBindingProject>
+    <Nullable>enable</Nullable>
+    <Version>3.5.5</Version>
+    <Authors>Approov Ltd</Authors>
+    <Description>Approov SDK native binding for .NET iOS</Description>
+    <!-- No license expression: a package built from this project embeds Approov.xcframework,
+         which is proprietary and NOT MIT. Packing is disabled until the package is produced
+         centrally with the correct proprietary license metadata. -->
+    <IsPackable>false</IsPackable>
+    <PackageProjectUrl>https://approov.io</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>Approov API-Protection Security iOS MAUI</PackageTags>
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <TargetPlatformVersion>18.0</TargetPlatformVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+  <ItemGroup>
+    <ObjcBindingApiDefinition Include="ApiDefinition.cs" />
+    <ObjcBindingCoreSource Include="StructsAndEnums.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <NativeReference Include="libs/Approov.xcframework">
+      <Kind>Framework</Kind>
+      <Frameworks>Foundation</Frameworks>
+      <LinkerFlags>-ObjC</LinkerFlags>
+      <ForceLoad>True</ForceLoad>
+      <NeedsGccExceptionHandling>False</NeedsGccExceptionHandling>
+      <IsCxx>False</IsCxx>
+      <SmartLink>True</SmartLink>
+      <ExtraArgs>--registrar:static</ExtraArgs>
+    </NativeReference>
+  </ItemGroup>
+</Project>

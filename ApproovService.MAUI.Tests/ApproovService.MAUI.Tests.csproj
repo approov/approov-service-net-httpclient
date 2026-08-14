@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>Approov.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- Exposes internal test seams (ApproovService.ResetForTesting,
+         SignatureParametersFactory.NowSeconds) to the unit suite only. This symbol is
+         deliberately NOT defined by ApproovService.MAUI.csproj, so those members are absent
+         from every shipped build in every configuration, Debug and Release alike. -->
+    <DefineConstants>$(DefineConstants);APPROOV_TESTING</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" Version="2.9.0" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Include all shared .cs files from the main project, excluding platform-specific code
+         and build outputs (obj/ contains generated Android binding sources after a platform build) -->
+    <Compile Include="../ApproovService.MAUI/**/*.cs"
+             Exclude="../ApproovService.MAUI/Platforms/**/*.cs;../ApproovService.MAUI/obj/**/*.cs;../ApproovService.MAUI/bin/**/*.cs" />
+  </ItemGroup>
+</Project>
