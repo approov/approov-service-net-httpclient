@@ -329,7 +329,8 @@ A single mutator that skips Approov processing for endpoints that do not need it
 proceed when the device is genuinely offline rather than failing the user's action:
 
 ```csharp
-using Approov;
+using Approov;              // ApproovService, IApproovTokenFetchResult, ApproovTokenFetchStatus
+using Approov.Util.Sig;     // ApproovDefaultMessageSigning
 
 public sealed class AppPolicyMutator : ApproovDefaultMessageSigning
 {
@@ -342,7 +343,8 @@ public sealed class AppPolicyMutator : ApproovDefaultMessageSigning
     public override bool HandleInterceptorShouldProcessRequest(HttpRequestMessage request)
         => request.RequestUri is not { } uri || !UnprotectedHosts.Contains(uri.Host);
 
-    // Proceed without a token on genuine network failures; keep every other status fail-closed.
+    // Send unprocessed on genuine network failures; keep every other status fail-closed.
+    // Tokens only: this host set uses no secret substitution. See the warning below.
     public override bool HandleInterceptorFetchTokenResult(IApproovTokenFetchResult result, string url)
         => result.Status switch
         {
@@ -355,9 +357,19 @@ public sealed class AppPolicyMutator : ApproovDefaultMessageSigning
 ApproovService.SetServiceMutator(new AppPolicyMutator());
 ```
 
-Returning `false` from `HandleInterceptorFetchTokenResult` means "proceed without a token"; throwing
-(the default for most failure statuses) aborts the request. Note that proceeding without a token
-means the backend sees an unprotected request, so it must remain the enforcement point.
+Returning `false` from `HandleInterceptorFetchTokenResult` sends the request unprocessed. Throwing
+(the default for most failure statuses) aborts the request.
+
+`false` does more than omit the Approov token. The layer stops at that point, so the request also
+goes out without the trace ID header, without header or query parameter secret substitution, and
+without an RFC 9421 message signature.
+
+> **If you use Secrets Protection, do not return `false` here.** The request carries the
+> **placeholder** value instead of the real secret. The third-party API rejects the call, and the
+> placeholder is disclosed to it. Return `false` only when every host this mutator handles relies on
+> Approov tokens alone.
+
+A request that proceeds this way is unprotected, so the backend must remain the enforcement point.
 
 ### Log rejections with ARC and device ID to your telemetry
 

@@ -68,7 +68,9 @@ Please [read this](https://approov.io/docs/latest/approov-usage-documentation/#t
 
 In order to use `ApproovService` you must initialize it when your app starts, usually in `MauiProgram.cs`.
 
-Wrap initialization in a try/catch: on success, confirm the layer is enabled and log the Approov device ID together with an app-generated session/correlation id; on failure, log it and continue **unprotected** by re-initializing with an empty config (bypass mode) so the app still functions.
+Wrap initialization in a try/catch. If initialization fails, log the failure and initialize with an empty config. An empty config selects bypass mode, so the app continues to function **unprotected**.
+
+Keep the state logging in a second try/catch, as shown below. `Initialize("")` is ignored once initialization has succeeded, so a throw from the logging calls must not reach the bypass fallback. If it did, the fallback would silently do nothing.
 
 ```csharp
 using Approov;
@@ -83,19 +85,31 @@ public static class ApproovStartup
         try
         {
             ApproovService.Initialize("<enter-your-config-string-here>");
-            if (ApproovService.IsApproovEnabled())
-                Console.WriteLine($"Approov enabled, deviceID={ApproovService.GetDeviceID()} session={SessionId}");
         }
         catch (Exception failure)
         {
             Console.WriteLine($"Approov initialization failed: {failure.Message}");
             ApproovService.Initialize("");   // bypass mode: the app keeps working, unprotected
         }
+
+        // Separate try/catch: these calls reach the native SDK and can throw on their own.
+        // A failure here must not trigger the bypass fallback above.
+        try
+        {
+            if (ApproovService.IsApproovEnabled())
+                Console.WriteLine($"Approov enabled, deviceID={ApproovService.GetDeviceID()} session={SessionId}");
+        }
+        catch (Exception failure)
+        {
+            Console.WriteLine($"Approov state logging failed: {failure.Message}");
+        }
     }
 }
 ```
 
-The `<enter-your-config-string-here>` is a custom string that configures your Approov account access. This will have been provided in your Approov onboarding email. On success the example logs the Approov **device ID** (`GetDeviceID()`) and an **app-generated session/correlation id** so a given install can be correlated across your app logs, backend, and the Approov metrics. If initialization fails it re-initializes with an empty config so the app keeps working — but those requests go out **without Approov protection**, so the backend remains the enforcement point.
+The `<enter-your-config-string-here>` is a custom string that configures your Approov account access. Your Approov onboarding email contains this string. On success the example logs the Approov **device ID** (`GetDeviceID()`) and an **app-generated session/correlation id**, so you can correlate a given install across your app logs, your backend, and the Approov metrics. If initialization fails, the example initializes with an empty config and the app keeps working. Those requests go out **without Approov protection**, so the backend remains the enforcement point.
+
+`Initialize("")` selects bypass mode only when no initialization has succeeded yet. Once the service is initialized, the call logs `Initialize with empty configuration ignored: already initialized` and returns. You cannot use it to switch a running app into bypass mode.
 
 Note that **every** successful initialization is a boundary: it resets runtime configuration and discards a custom service mutator. Apply your configuration *after* initializing. See [USAGE.md](USAGE.md).
 
