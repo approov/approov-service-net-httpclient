@@ -307,3 +307,103 @@ underlying native Approov SDK manages its own internal logging and exposes no lo
 the layer, so `SetLoggingLevel` does not change SDK-internal verbosity. This matches the logging
 contract of the other Approov service layers (for example React Native), where the same call gates
 the wrapper's logging rather than the SDK's.
+
+## Platform Requirements
+
+| | Android | iOS |
+|---|---|---|
+| Minimum version | API 23 (Android 6.0) | iOS 15.0 |
+| Target framework | `net9.0-android` | `net9.0-ios` |
+| SDK artifact | `libs/approov.aar` | `iOS.Binding/libs/Approov.xcframework` |
+| Manifest / plist changes | `INTERNET` **and** `ACCESS_NETWORK_STATE` permissions | none |
+
+`ACCESS_NETWORK_STATE` is required. Without it the SDK cannot query connectivity and every token
+fetch fails as `InternalError`, even though `Initialize`, `GetDeviceID()` and message signing all
+appear to work. See the [README](README.md) for how to fetch and place the SDK binaries.
+
+## Real-world Examples
+
+### Policy-driven mutator: host scoping and offline fallback
+
+A single mutator that skips Approov processing for endpoints that do not need it, and lets requests
+proceed when the device is genuinely offline rather than failing the user's action:
+
+```csharp
+using Approov;
+
+public sealed class AppPolicyMutator : ApproovDefaultMessageSigning
+{
+    private static readonly HashSet<string> UnprotectedHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "health.example.com", "cdn.example.com"
+    };
+
+    // Skip Approov entirely for hosts that do not need it.
+    public override bool HandleInterceptorShouldProcessRequest(HttpRequestMessage request)
+        => request.RequestUri is not { } uri || !UnprotectedHosts.Contains(uri.Host);
+
+    // Proceed without a token on genuine network failures; keep every other status fail-closed.
+    public override bool HandleInterceptorFetchTokenResult(IApproovTokenFetchResult result, string url)
+        => result.Status switch
+        {
+            ApproovTokenFetchStatus.NoNetwork or ApproovTokenFetchStatus.PoorNetwork => false,
+            _ => base.HandleInterceptorFetchTokenResult(result, url)
+        };
+}
+
+// After every successful Initialize, because initialization discards custom mutators:
+ApproovService.SetServiceMutator(new AppPolicyMutator());
+```
+
+Returning `false` from `HandleInterceptorFetchTokenResult` means "proceed without a token"; throwing
+(the default for most failure statuses) aborts the request. Note that proceeding without a token
+means the backend sees an unprotected request, so it must remain the enforcement point.
+
+### Log rejections with ARC and device ID to your telemetry
+
+Monitoring rejections is a key part of your security strategy. Ideally your backend includes the
+**ARC (Approov Rejection Code)** and **device ID** in its error responses when it rejects a request,
+and you log those.
+
+**Why server-side values are preferred:**
+
+1. **Avoid misleading network events.** A call to `GetLastARC()` can trigger a background network
+   event that completes a delayed attestation, returning an ARC from a *successful* attestation that
+   happened *after* your request failed.
+2. **Corporate firewall and MITM cases.** If your mutator lets a request proceed on `MitmDetected`,
+   the request goes out without a token and no rejection code exists yet for that attempt.
+3. **Accuracy and correlation.** Logging the ARC the server actually rejected on gives perfect
+   correlation in your dashboards.
+
+```csharp
+using HttpResponseMessage response = await client.SendAsync(request);
+if (!response.IsSuccessStatusCode)
+{
+    // Preferred: the ARC your own backend observed and rejected on.
+    string? serverArc = response.Headers.TryGetValues("X-Approov-Error-ARC", out var values)
+        ? values.FirstOrDefault()
+        : null;
+
+    // Fallback only if the server cannot supply it; may trigger background network events.
+    string? arc = serverArc ?? ApproovService.GetLastARC();
+    string? deviceId = ApproovService.GetDeviceID();
+    Console.WriteLine($"Request rejected. ARC={arc} deviceID={deviceId}");
+}
+```
+
+A `RejectionException` also carries `ARC` and `RejectionReasons` directly, for the paths where the
+layer aborts the request rather than letting it reach your backend.
+
+## Tips
+
+- Keep mutator logic fast and side-effect safe. These hooks run on the request path.
+- Subclass `ApproovDefaultMessageSigning` to keep message signing and layer your changes on top;
+  subclass `ApproovServiceMutatorDefault` (or install `ApproovServiceMutatorDefault.Shared`) when you
+  want no signing.
+- If you override multiple hooks, keep them focused — one concern per hook — for easier testing.
+- Re-apply `SetServiceMutator` and any runtime configuration after **every** successful
+  `Initialize`, including a re-initialization with the same config.
+- Use the asynchronous API. Synchronous `HttpClient.Send` throws `NotSupportedException` rather than
+  sending an unprotected request.
+- A mutator cannot disable TLS pinning in this layer; see the divergence table in
+  [REFERENCE.md](REFERENCE.md).
